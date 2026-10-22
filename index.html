@@ -262,6 +262,12 @@ mark { background: var(--mark); color: var(--mark-ink); padding: 0 1px; border-r
 a.btn { display: block; text-align: center; text-decoration: none; }
 .waitnote { font-size: 13px; font-weight: 700; color: var(--good); background: var(--good-soft); border-radius: 8px; padding: 6px 10px; }
 .crowdpost button:disabled { opacity: .4; cursor: not-allowed; }
+.gmapbox { height: 320px; background: var(--grid); }
+.gmap { width: 100%; height: 100%; }
+.mapfail { display: grid; place-items: center; height: 100%; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
+.mapwrap .herebtn { top: 8px; bottom: auto; right: 8px; }
+.iw { font-size: 13px; font-weight: 700; color: #1c2332; }
+@media (max-width: 380px) { .gmapbox { height: 260px; } }
 .more summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 700; padding-block: 2px; }
 .more[open] summary { margin-bottom: 8px; }
 .perks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -317,18 +323,15 @@ const powerText = s => s.power === 'unknown' ? NA : s.power === 'some' && s.seat
 const CROWD = ['空いている', 'ふつう', '混んでいる'];
 const STATION = { x: 182, y: 128 };
 // 距離の基準。現在地はプロトタイプでは地図をタップして決め、保存しない(並べ替えにだけ使う)
-const BASES = { station: { x: 70, y: 112, name: 'もりの里(イオン前)' }, univ: { x: 268, y: 112, name: '中央図書館' } };
-let baseKind = 'univ', here = null, picking = false;
+const BASES = { station: { lat: 36.5516427, lng: 136.6899806, name: 'もりの里(イオン前)' }, univ: { lat: 36.548807, lng: 136.7108479, name: '中央図書館' } };
+let baseKind = 'univ', here = null;
 const basePt = () => baseKind === 'here' && here ? here : BASES[baseKind === 'here' ? 'station' : baseKind];
 const baseName = () => baseKind === 'here' && here ? '現在地' : basePt().name;
-const MIN_PX = 9; // 配置図上の9単位 ≒ 徒歩1分(直線距離からの目安)
-// 地図の表示範囲(拡大・移動)と「このエリアで探す」の範囲
-const MAP_W = 360, MAP_H = 240;
-let vb = { x: 0, y: 0, w: MAP_W, h: MAP_H }, areaRect = null, areaDirty = false;
+let areaBounds = null, areaDirty = false;
 
 // 2026-10-21 にWeb上の公開情報で確認した内容だけを載せる。分からない項目は 'unknown' / null(画面では「未確認」)
 const SPOTS = [
-  { id: 'clib', name: '金沢大学 中央図書館(2〜3階 学習スペース)', type: 'univ_lib', x: 272, y: 116, study: 'ok',
+  { id: 'clib', lat: 36.548807, lng: 136.7108479, placeId: 'ChIJT3Wl9Vkx-F8RlajWInX2D_k', name: '金沢大学 中央図書館(2〜3階 学習スペース)', type: 'univ_lib', x: 272, y: 116, study: 'ok',
     rule: '2〜3階の書架の近くに閲覧・学習スペースがあります。3階のラーニングコモンズ(オープンスタジオなど)は予約なしで利用できます。グループスタジオA・Bは金沢大学IDでWeb予約',
     limit: null, orderEvery: null, price: '無料(学外の方は入館時に受付票を記入)', free: true, power: 'unknown', wifi: null,
     wk: [8.75, 22], we: [10, 17], closed: 0, hoursNote: '祝日・休業期間は時間が変わります。開館カレンダーで確認してください',
@@ -337,7 +340,7 @@ const SPOTS = [
     seatsStudy: 1098, seatsTotal: null, seatsPower: null, desk: null, seatNote: '閲覧座席数(館全体)',
     mapQuery: '金沢大学 中央図書館',
     links: [['施設紹介(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18497'], ['利用案内(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18498'], ['開館カレンダー(PDF)', 'https://library.kanazawa-u.ac.jp/files/cal/clib_cal.pdf'], ['学外・地域の方へ(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18283']] },
-  { id: 'honwa', name: 'ほん和かふぇ。(中央図書館 ブックラウンジ)', type: 'cafe', x: 258, y: 106, study: 'ok',
+  { id: 'honwa', lat: 36.54862, lng: 136.71058, placeId: 'ChIJT3Wl9Vkx-F8RlajWInX2D_k', name: 'ほん和かふぇ。(中央図書館 ブックラウンジ)', type: 'cafe', x: 258, y: 106, study: 'ok',
     rule: '本をきっかけにした出会いや対話の場として作られたライブラリーカフェです。ラウンジの席は勉強に使え、カフェの営業時間外も利用できます',
     srcLabel: 'Webの公開情報+製作者の利用経験',
     limit: null, orderEvery: null, price: '席の利用は無料(カフェはコーヒー・ソフトドリンク・軽食、マイカップ持参で20円引き)', free: true, power: 'some', wifi: true,
@@ -348,7 +351,7 @@ const SPOTS = [
     seatsStudy: 55, seatsApprox: true, seatsTotal: null, seatsPower: null, desk: null, seatNote: 'カウンター約15席、テーブル約40席',
     mapQuery: '金沢大学 中央図書館',
     links: [['ほん和かふぇ。(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18503'], ['中央図書館 館内マップ', 'https://library.kanazawa-u.ac.jp/?page_id=18499']] },
-  { id: 'nlib', name: '金沢大学 自然科学系図書館', type: 'univ_lib', x: 300, y: 188, study: 'ok',
+  { id: 'nlib', lat: 36.5454072, lng: 136.7057083, placeId: 'ChIJT3Wl9Vkx-F8RlvYL1TCtT6s', name: '金沢大学 自然科学系図書館', type: 'univ_lib', x: 300, y: 188, study: 'ok',
     rule: '1階にラーニングコモンズ(オープンスタジオなど)。研究個室1〜4(各1席)とグループスタジオ1〜5は金沢大学IDでWeb予約が必要です',
     limit: null, orderEvery: null, price: '無料(学外の方は入館時に受付票を記入)', free: true, power: 'unknown', wifi: null,
     wk: [8.75, 22], we: [10, 16], closed: 0, hoursNote: '平日の開館時刻は資料により8:30/8:45と差があります。祝日・休業期間を含め開館カレンダーで確認してください',
@@ -357,7 +360,7 @@ const SPOTS = [
     seatsStudy: 631, seatsTotal: null, seatsPower: null, desk: null, seatNote: '閲覧座席数(館全体)。研究個室4室(各1席)',
     mapQuery: '金沢大学 自然科学系図書館',
     links: [['施設紹介(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18590'], ['利用案内(公式)', 'https://library.kanazawa-u.ac.jp/?page_id=18589'], ['開館カレンダー(PDF)', 'https://library.kanazawa-u.ac.jp/files/cal/nlib_cal.pdf']] },
-  { id: 'nakafukuri', name: 'ナカフクリ食堂', type: 'canteen', x: 246, y: 140, study: 'welcome',
+  { id: 'nakafukuri', lat: 36.5465511, lng: 136.7083274, placeId: 'ChIJJW-vhLox-F8R4reyJwrVmqE', name: 'ナカフクリ食堂', type: 'canteen', x: 246, y: 140, study: 'welcome',
     rule: '昼の混雑時間(12:00〜13:00)を避ければ、食事以外の時間も勉強に使えます',
     avoidFrom: 12, avoidTo: 13,
     limit: null, orderEvery: null, price: '席の利用は無料(ドリンク200円〜)', free: true, power: 'some', wifi: true,
@@ -370,7 +373,7 @@ const SPOTS = [
     seatsStudy: 60, seatsApprox: true, seatsTotal: null, seatsPower: null, desk: null, seatNote: '窓側カウンター約10席、テーブル約50席',
     mapQuery: '金沢大学 中福利施設 ナカフクリ食堂',
     links: [['ナカフクリ食堂(運営元)', 'https://share-kanazawa.com/yabutan/index.html#nakafukuri_syokudou'], ['食堂・売店(金沢大学)', 'https://www.kanazawa-u.ac.jp/students/livelihood/shoprestaurant/']] },
-  { id: 'komeda', name: 'コメダ珈琲店 金沢もりの里店', type: 'cafe', x: 96, y: 150, study: 'unknown',
+  { id: 'komeda', lat: 36.5488492, lng: 136.6896784, placeId: 'ChIJ6RKOIfAz-F8RBiCNFrT9SQA', name: 'コメダ珈琲店 金沢もりの里店', type: 'cafe', x: 96, y: 150, study: 'unknown',
     rule: '勉強・PC作業をしてよいかは、まだ確認できていません。行った方は「情報の修正を提案する」から教えてください',
     limit: null, limitUnknown: true, orderEvery: null, price: 'メニュー・料金は店舗で確認', free: false, power: 'unknown', wifi: null,
     wk: [7, 23], we: [7, 23], closed: null, hoursNote: '掲載サイトでは7:00〜23:00。閉店時刻が異なる表示もあるため要確認',
@@ -418,8 +421,11 @@ function welcomeNow(s) {
   const d = new Date(); if (d.getDay() === 0 || d.getDay() === 6) return false;
   return d.getHours() >= s.studyFrom && d.getHours() < s.studyTo;
 }
-const walkText = s => { const b = basePt(), d = Math.hypot(s.x - b.x, s.y - b.y); return d < MIN_PX * 1.5 ? `${baseName()}のすぐ近く` : `${baseName()}から徒歩約${walkMin(s)}分`; };
-const walkMin = s => { const b = basePt(); return Math.max(1, Math.round(Math.hypot(s.x - b.x, s.y - b.y) / MIN_PX)); };
+const distM = (a, b) => { const R = 6371000, r = x => x * Math.PI / 180, dLa = r(b.lat - a.lat), dLo = r(b.lng - a.lng);
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const WALK_M_PER_MIN = 80, ROUTE_FACTOR = 1.3;
+const walkMin = s => Math.max(1, Math.round(distM(basePt(), s) * ROUTE_FACTOR / WALK_M_PER_MIN));
+const walkText = s => distM(basePt(), s) < 120 ? `${baseName()}のすぐ近く` : `${baseName()}から徒歩約${walkMin(s)}分`;
 
 function isOpen(s, now = new Date()) {
   if (s.closed === now.getDay()) return false;
@@ -496,7 +502,7 @@ function filtered() {
     if (filters.wide && s.desk !== 'wide') return false;
     if (filters.studyOnly && s.study === 'ng') return false;
     if (filters.within && walkMin(s) > filters.within) return false;
-    if (areaRect && !(s.x >= areaRect.x && s.x <= areaRect.x + areaRect.w && s.y >= areaRect.y && s.y <= areaRect.y + areaRect.h)) return false;
+    if (areaBounds && !areaBounds.contains({ lat: s.lat, lng: s.lng })) return false;
     return true;
   });
   const by = {
@@ -510,51 +516,67 @@ function filtered() {
 }
 
 // ---------- views ----------
-function mapSVG(list) {
-  const ids = new Set(list.map(s => s.id));
-  const k = vb.w / MAP_W, b = basePt();
-  let pins = '', label = '';
+// ---------- Googleマップ ----------
+// このキーはページに書き込む前提のもの。Google Cloud側で「このサイトだけ」「Maps JavaScript APIだけ」に制限している
+const MAPS_KEY = 'AIzaSyAu7fZ4SmKOnOutR8DS7VOuAGFwOx-HDQw';
+let gmap = null, gmapFailed = false, mapEl = null, info = null, baseMarker = null, ring = null, progMove = false;
+const markers = {};
+const cssColor = n => (getComputedStyle(document.documentElement).getPropertyValue(n) || '').trim() || '#7a8291';
+function loadMaps() {
+  if (gmap || gmapFailed || document.getElementById('gmaps-js')) return;
+  window.__gmReady = () => { try { initMap(); } catch (e) { gmapFailed = true; } syncMap(); };
+  window.gm_authFailure = () => { gmapFailed = true; gmap = null; syncMap(); };
+  const sc = document.createElement('script');
+  sc.id = 'gmaps-js'; sc.async = true;
+  sc.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=__gmReady&loading=async&language=ja&region=JP`;
+  sc.onerror = () => { gmapFailed = true; syncMap(); };
+  document.head.appendChild(sc);
+}
+function initMap() {
+  mapEl = document.createElement('div'); mapEl.className = 'gmap';
+  gmap = new google.maps.Map(mapEl, { center: basePt(), zoom: 15, clickableIcons: false, gestureHandling: 'greedy',
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: false, zoomControl: true });
+  info = new google.maps.InfoWindow({ disableAutoPan: true });
+  progMove = true;
+  const bounds = new google.maps.LatLngBounds(); SPOTS.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
+  gmap.fitBounds(bounds, 32);
+  gmap.addListener('bounds_changed', () => { if (!progMove) areaDirty = true; });
+  gmap.addListener('idle', () => { progMove = false; const b = document.getElementById('areaBtn'); if (b) b.hidden = !areaDirty; });
+}
+function panTo(p, zoom) { if (!gmap || !p) return; progMove = true; gmap.panTo({ lat: p.lat, lng: p.lng }); if (zoom) gmap.setZoom(zoom); }
+function pickSpot(id) {
+  selected = id; updateResults();
+  const c = document.getElementById('card-' + id); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function syncMap() {
+  const box = document.getElementById('mapArea'); if (!box) return;
+  if (gmapFailed) { box.innerHTML = '<div class="mapfail">地図を読み込めませんでした。一覧・検索と、各スポットの「Googleマップで開く」は使えます。</div>'; return; }
+  if (!gmap) { if (!box.firstChild) box.innerHTML = '<div class="mapfail">地図を読み込んでいます…</div>'; loadMaps(); return; }
+  if (mapEl.parentNode !== box) { box.innerHTML = ''; box.appendChild(mapEl); }
+  const ids = new Set(filtered().map(s => s.id));
   SPOTS.forEach(s => {
-    const show = ids.has(s.id);
-    if (!show) return;
-    const open = isOpen(s);
-    const cn = crowdNow(s), col = open && cn ? crowdColor(cn.level) : 'var(--muted)';
-    const sel = selected === s.id;
-    const r = (sel ? 13 : 10.5) * k;
-    pins += `<g class="pin" data-spot="${s.id}" tabindex="0" role="button" aria-label="${esc(s.name)}">
-      <circle cx="${s.x}" cy="${s.y}" r="${r + 3 * k}" fill="var(--surface)" opacity=".9"/>
-      <circle cx="${s.x}" cy="${s.y}" r="${r}" fill="${col}" ${s.study === 'ng' ? 'fill-opacity=".45"' : ''} stroke="${sel ? 'var(--ink)' : 'none'}" stroke-width="${2 * k}"/>
-      <text x="${s.x}" y="${s.y + 4 * k}" text-anchor="middle" font-size="${(sel ? 12 : 10.5) * k}" fill="#fff">${TYPE_MARK[s.type]}</text></g>`;
-    if (sel) {
-      const fs = 11 * k, tw = s.name.length * fs + 12 * k, th = fs + 10 * k;
-      const lx = Math.min(Math.max(s.x - tw / 2, vb.x + 4 * k), vb.x + vb.w - tw - 4 * k), ly = s.y - r - th - 6 * k;
-      label = `<g pointer-events="none"><rect x="${lx}" y="${ly}" width="${tw}" height="${th}" rx="${5 * k}" fill="var(--ink)"/><text x="${lx + tw / 2}" y="${ly + th / 2 + fs * 0.36}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="var(--surface)">${esc(s.name)}</text></g>`;
-    }
+    let m = markers[s.id];
+    if (!m) { m = new google.maps.Marker({ position: { lat: s.lat, lng: s.lng }, map: gmap, title: s.name }); m.addListener('click', () => pickSpot(s.id)); markers[s.id] = m; }
+    const cn = crowdNow(s), sel = selected === s.id;
+    m.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: sel ? 14 : 11,
+      fillColor: isOpen(s) && cn ? cssColor(['--good', '--warn', '--bad'][cn.level]) : cssColor('--muted'),
+      fillOpacity: s.study === 'ng' ? 0.5 : 1, strokeColor: sel ? '#1c2332' : '#ffffff', strokeWeight: sel ? 3 : 2 });
+    m.setLabel({ text: TYPE_MARK[s.type], color: '#ffffff', fontSize: sel ? '12px' : '11px', fontWeight: '700' });
+    m.setZIndex(sel ? 10 : 1); m.setVisible(ids.has(s.id));
   });
-  let grid = '';
-  for (let x = 0; x <= 360; x += 15) grid += `<line x1="${x}" y1="0" x2="${x}" y2="240" stroke="var(--grid)" stroke-width="1"/>`;
-  for (let y = 0; y <= 240; y += 15) grid += `<line x1="0" y1="${y}" x2="360" y2="${y}" stroke="var(--grid)" stroke-width="1"/>`;
-  const ring = filters.within ? `<circle cx="${b.x}" cy="${b.y}" r="${filters.within * MIN_PX}" fill="var(--accent)" fill-opacity=".07" stroke="var(--accent)" stroke-width="${1.2 * k}" stroke-dasharray="${5 * k} ${4 * k}"/><text x="${b.x}" y="${b.y - filters.within * MIN_PX - 4 * k}" text-anchor="middle" font-size="${9.5 * k}" font-weight="700" fill="var(--accent)">徒歩${filters.within}分</text>` : '';
-  const area = areaRect ? `<rect x="${areaRect.x}" y="${areaRect.y}" width="${areaRect.w}" height="${areaRect.h}" fill="none" stroke="var(--accent)" stroke-width="${1.5 * k}"/>` : '';
-  return `<svg viewBox="${vb.x} ${vb.y} ${vb.w} ${vb.h}" role="img" aria-label="金沢大学角間キャンパスともりの里の勉強スポット配置図">
-    ${grid}
-    <g pointer-events="none">
-      <rect x="22" y="70" width="150" height="128" rx="14" fill="var(--grid)" stroke="var(--line)" stroke-width="${k}"/>
-      <text x="34" y="88" font-size="${10 * k}" font-weight="700" fill="var(--muted)">もりの里</text>
-      <rect x="206" y="36" width="140" height="184" rx="18" fill="var(--park)" stroke="var(--line)" stroke-width="${k}"/>
-      <text x="218" y="54" font-size="${10 * k}" font-weight="700" fill="var(--muted)">金沢大学 角間キャンパス</text>
-      <text x="336" y="78" text-anchor="end" font-size="${8.5 * k}" fill="var(--muted)">北地区</text>
-      <text x="336" y="150" text-anchor="end" font-size="${8.5 * k}" fill="var(--muted)">中地区</text>
-      <text x="336" y="212" text-anchor="end" font-size="${8.5 * k}" fill="var(--muted)">南地区</text>
-      <rect x="50" y="100" width="40" height="22" rx="4" fill="var(--surface)" stroke="var(--line)" stroke-width="${k}"/>
-      <text x="70" y="114" text-anchor="middle" font-size="${8 * k}" fill="var(--muted)">イオン</text>
-      <text x="8" y="234" font-size="${8.5 * k}" fill="var(--muted)">位置関係の目安です(縮尺は正確ではありません)</text>
-    </g>
-    ${ring}${area}
-    <circle cx="${b.x}" cy="${b.y}" r="${9 * k}" fill="var(--accent)" fill-opacity=".18"/>
-    <circle cx="${b.x}" cy="${b.y}" r="${4.5 * k}" fill="var(--accent)" stroke="var(--surface)" stroke-width="${2 * k}"/>
-    ${pins}${label}
-  </svg>`;
+  const b = basePt();
+  if (!baseMarker) baseMarker = new google.maps.Marker({ map: gmap, clickable: false, zIndex: 0 });
+  baseMarker.setPosition({ lat: b.lat, lng: b.lng }); baseMarker.setTitle(baseName());
+  baseMarker.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: 7, fillColor: cssColor('--accent'), fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3 });
+  if (filters.within) {
+    if (!ring) ring = new google.maps.Circle({ clickable: false });
+    ring.setOptions({ map: gmap, center: { lat: b.lat, lng: b.lng }, radius: filters.within * WALK_M_PER_MIN / ROUTE_FACTOR,
+      strokeColor: cssColor('--accent'), strokeOpacity: 0.8, strokeWeight: 1.5, fillColor: cssColor('--accent'), fillOpacity: 0.07 });
+  } else if (ring) ring.setMap(null);
+  if (selected && markers[selected] && ids.has(selected)) {
+    const n = document.createElement('div'); n.className = 'iw'; n.textContent = spotById(selected).name;
+    info.setContent(n); info.open({ anchor: markers[selected], map: gmap, shouldFocus: false });
+  } else info.close();
 }
 
 function cardsHTML(list) {
@@ -586,7 +608,7 @@ function updateResults() {
   const list = filtered();
   const m = document.getElementById('mapArea'), c = document.getElementById('resCount'), l = document.getElementById('resList'), sg = document.getElementById('suggest'), x = document.getElementById('qClear');
   if (!m) return;
-  m.innerHTML = mapSVG(list); c.textContent = `${list.length}件`; l.innerHTML = cardsHTML(list) || emptyHTML();
+  syncMap(); c.textContent = `${list.length}件`; l.innerHTML = cardsHTML(list) || emptyHTML();
   sg.hidden = !!query; x.hidden = !query;
 }
 
@@ -604,18 +626,16 @@ function renderSearch() {
     <div class="suggest" id="suggest" ${query ? 'hidden' : ''}><span>よく使われる言葉</span>${SUGGEST.map(w => `<button type="button" data-q="${w}">${w}</button>`).join('')}</div>
     <div class="baserow" role="group" aria-label="距離の基準"><span>どこから</span><span class="seg">
       <button type="button" data-base="here" aria-pressed="${baseKind === 'here'}">現在地</button><button type="button" data-base="univ" aria-pressed="${baseKind === 'univ'}">中央図書館</button><button type="button" data-base="station" aria-pressed="${baseKind === 'station'}">もりの里</button></span>
-      ${baseKind === 'here' && here ? '<span>現在地は並べ替えにだけ使い、保存しません</span>' : ''}</div>
-    <div class="mapbox"><div class="mapwrap ${vb.w < MAP_W ? 'zoomed' : ''} ${picking ? 'picking' : ''}" id="mapWrap"><div id="mapArea">${mapSVG(list)}</div>
-      <div class="mapctl"><button type="button" data-zoom="in" aria-label="拡大" ${vb.w <= 120 ? 'disabled' : ''}>+</button><button type="button" data-zoom="out" aria-label="縮小" ${vb.w >= MAP_W ? 'disabled' : ''}>−</button></div>
+      <span>現在地は近い順に並べるためだけに使い、保存しません</span></div>
+    <div class="mapbox"><div class="mapwrap" id="mapWrap"><div id="mapArea" class="gmapbox"></div>
       <button type="button" class="areabtn" id="areaBtn" ${areaDirty ? '' : 'hidden'}>このエリアで探す</button>
-      ${picking ? '<div class="pickhint">地図をタップして現在地を決めてください(プロトタイプ用)</div>' : ''}
       <button type="button" class="herebtn" data-here="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>現在地</button>
     </div>
-      <div class="legend"><span><i style="background:var(--good)"></i>空いている</span><span><i style="background:var(--warn)"></i>ふつう</span><span><i style="background:var(--bad)"></i>混んでいる</span><span><i style="background:var(--muted)"></i>情報なし・時間外</span><span><i style="background:var(--accent)"></i>${esc(baseName())}</span><span>ピンをタップで一覧の位置へ</span></div>
+      <div class="legend"><span><i style="background:var(--good)"></i>空いている</span><span><i style="background:var(--warn)"></i>ふつう</span><span><i style="background:var(--bad)"></i>混んでいる</span><span><i style="background:var(--muted)"></i>情報なし・時間外</span><span><i style="background:var(--accent)"></i>${esc(baseName())}</span><span>ピンをタップで一覧の位置へ・距離は直線距離からの目安</span></div>
     </div>
     <div class="filters">
       <div class="chips" aria-label="種別">${Object.keys(TYPES).map(tchip).join('')}</div>
-      <div class="chips" aria-label="距離">${[5, 10, 15].map(m => `<button class="chip" data-within="${m}" aria-pressed="${filters.within === m}">徒歩${m}分以内</button>`).join('')}${areaRect ? '<button class="chip area" data-area-clear="1" aria-label="表示中のエリアの絞り込みを外す">表示中のエリアのみ ×</button>' : ''}</div>
+      <div class="chips" aria-label="距離">${[5, 10, 15].map(m => `<button class="chip" data-within="${m}" aria-pressed="${filters.within === m}">徒歩${m}分以内</button>`).join('')}${areaBounds ? '<button class="chip area" data-area-clear="1" aria-label="表示中のエリアの絞り込みを外す">表示中のエリアのみ ×</button>' : ''}</div>
       <div class="chips" aria-label="条件">${chip('open', '営業中')}${chip('power', '電源あり')}${chip('wifi', 'Wi-Fi')}${chip('long', '2時間以上OK')}${chip('quiet', '静か')}${chip('wide', '広い机')}${chip('free', '無料')}${chip('studyOnly', '勉強不可を隠す')}</div>
       <div class="sortrow"><span id="resCount">${list.length}件</span>
         <label>並び順 <select id="sortSel">
@@ -974,9 +994,9 @@ function renderDetail(s) {
       </div>
       <div class="sec"><h4>公式情報と地図</h4>
         <div class="links">${(s.links || []).map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join('')}
-          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.mapQuery || s.name)}" target="_blank" rel="noopener">Googleマップで開く</a>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}&travelmode=walking" target="_blank" rel="noopener">徒歩の道順を見る</a></div>
-        <div class="hint">このページの地図は位置関係の目安です。正確な場所と道順はGoogleマップで確認してください。</div>
+          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&query_place_id=' + s.placeId : ''}" target="_blank" rel="noopener">Googleマップで開く</a>
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&destination_place_id=' + s.placeId : ''}&travelmode=walking" target="_blank" rel="noopener">徒歩の道順を見る</a></div>
+        <div class="hint">徒歩の時間は直線距離からの目安です。実際の道順と時間はGoogleマップで確認してください。</div>
       </div>
       <div class="sec"><h4>利用者の実績 <span class="src usr">投稿から集計</span></h4>
         ${(() => { const st2 = statsOf(s); return st2.n ? `<div class="stats">
@@ -1199,40 +1219,22 @@ const view = document.getElementById('view');
 const sheetRoot = document.getElementById('sheetRoot');
 let sheet = null; // {kind, spot}
 
-// ---------- map pan / zoom ----------
-let lastDrag = 0;
-function clampVb() { vb.x = Math.min(Math.max(0, vb.x), MAP_W - vb.w); vb.y = Math.min(Math.max(0, vb.y), MAP_H - vb.h); }
-function centerOn(p) { if (!p) return; vb.x = p.x - vb.w / 2; vb.y = p.y - vb.h / 2; clampVb(); }
-function zoom(f) {
-  const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
-  vb.w = Math.min(MAP_W, Math.max(120, vb.w * f)); vb.h = vb.w * MAP_H / MAP_W;
-  vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2; clampVb();
-  areaDirty = vb.w < MAP_W || !!areaRect; render();
+// ---------- 現在地 ----------
+let locating = false;
+function requestHere() {
+  if (locating) return;
+  if (!navigator.geolocation) { toast('この端末では現在地を取得できません。「中央図書館」「もりの里」から選んでください'); return; }
+  locating = true; toast('現在地を確認しています(近い順に並べるためだけに使い、保存しません)');
+  navigator.geolocation.getCurrentPosition(p => {
+    locating = false;
+    here = { lat: p.coords.latitude, lng: p.coords.longitude, name: '現在地' }; baseKind = 'here';
+    render(); panTo(here, 16);
+    toast(distM(here, BASES.univ) > 5000 ? '現在地が角間・もりの里から離れているため、距離は参考程度です' : '現在地から近い順に並べました');
+  }, err => {
+    locating = false;
+    toast(err && err.code === 1 ? '位置情報が許可されませんでした。「中央図書館」「もりの里」を基準に探せます' : '現在地を取得できませんでした。少し移動するか、もう一度お試しください');
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
-let drag = null;
-view.addEventListener('pointerdown', e => {
-  const svg = e.target.closest('#mapArea svg'); if (!svg) return;
-  drag = { x0: e.clientX, y0: e.clientY, vx: vb.x, vy: vb.y, moved: false, svg, rect: svg.getBoundingClientRect(), onPin: !!e.target.closest('g.pin') };
-});
-window.addEventListener('pointermove', e => {
-  if (!drag || vb.w >= MAP_W) return;
-  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
-  if (!drag.moved && Math.hypot(dx, dy) < 5) return;
-  drag.moved = true;
-  const sc = vb.w / drag.rect.width;
-  vb.x = drag.vx - dx * sc; vb.y = drag.vy - dy * sc; clampVb();
-  drag.svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-});
-window.addEventListener('pointerup', e => {
-  if (!drag) return;
-  const d = drag; drag = null;
-  if (d.moved) { lastDrag = Date.now(); areaDirty = true; const b = document.getElementById('areaBtn'); if (b) b.hidden = false; return; }
-  if (picking && !d.onPin && d.rect.width) {
-    here = { x: vb.x + (e.clientX - d.rect.left) / d.rect.width * vb.w, y: vb.y + (e.clientY - d.rect.top) / d.rect.height * vb.h, name: '現在地' };
-    picking = false; baseKind = 'here'; render(); toast('現在地を決めました。近い順に並べ替えています');
-  }
-});
-window.addEventListener('pointercancel', () => { drag = null; });
 
 let mode = 'user';
 function render() {
@@ -1241,6 +1243,7 @@ function render() {
   if (mode === 'store') { view.innerHTML = renderStore(); return; }
   if (mode === 'ops') { view.innerHTML = renderOps(); return; }
   view.innerHTML = tab === 'search' ? renderSearch() : tab === 'timer' ? renderTimer() : renderMe();
+  if (tab === 'search') syncMap();
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
   document.getElementById('timerLabel').textContent = store.timer ? fmtClock(tElapsedMin()).slice(0, 5) + ' 勉強中' : 'タイマー';
 }
@@ -1277,29 +1280,20 @@ view.addEventListener('click', e => {
   if (fBtn) { filters[fBtn.dataset.f] = !filters[fBtn.dataset.f]; store.filters = filters; save(); render(); return; }
   const sp = t.closest('[data-spot]');
   if (sp) {
-    if (sp.matches('g.pin')) {
-      if (Date.now() - lastDrag < 250) return;
-      selected = sp.dataset.spot; updateResults();
-      const c = document.getElementById('card-' + selected); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
-    selected = sp.dataset.spot; if (tab === 'search') { centerOn(spotById(selected)); render(); } openSheet('detail', selected); return;
+    selected = sp.dataset.spot; if (tab === 'search') { panTo(spotById(selected)); render(); } openSheet('detail', selected); return;
   }
   const wb = t.closest('[data-within]');
   if (wb) { const m = +wb.dataset.within; filters.within = filters.within === m ? 0 : m; store.filters = filters; save(); render(); return; }
-  if (t.closest('[data-area-clear]')) { areaRect = null; render(); return; }
-  if (t.closest('#areaBtn')) { areaRect = Object.assign({}, vb); areaDirty = false; render(); return; }
-  const zb = t.closest('[data-zoom]');
-  if (zb) { zoom(zb.dataset.zoom === 'in' ? 1 / 1.5 : 1.5); return; }
+  if (t.closest('[data-area-clear]')) { areaBounds = null; render(); return; }
+  if (t.closest('#areaBtn')) { if (gmap) { areaBounds = gmap.getBounds(); areaDirty = false; render(); } return; }
   const bb = t.closest('[data-base]');
   if (bb) {
     const kd = bb.dataset.base;
-    if (kd === 'here' && !here) { picking = true; baseKind = 'here'; render(); return; }
-    baseKind = kd; picking = false; render(); return;
+    if (kd === 'here') { requestHere(); return; }
+    baseKind = kd; render(); panTo(basePt()); return;
   }
   if (t.closest('[data-here]')) {
-    if (!here || baseKind === 'here') { picking = true; baseKind = 'here'; render(); return; }
-    baseKind = 'here'; centerOn(here); render(); return;
+    requestHere(); return;
   }
   if (t.closest('#tStart')) {
     const id = document.getElementById('tSpot').value;
