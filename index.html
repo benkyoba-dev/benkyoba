@@ -268,6 +268,7 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 .mapwrap .herebtn { top: 8px; bottom: auto; right: 8px; }
 .iw { font-size: 13px; font-weight: 700; color: #1c2332; }
 @media (max-width: 380px) { .gmapbox { height: 260px; } }
+.offline { margin-top: 12px; border-radius: 8px; padding: 8px 12px; font-size: 13px; background: var(--warn-soft); color: var(--ink); }
 .more summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 700; padding-block: 2px; }
 .more[open] summary { margin-bottom: 8px; }
 .perks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -305,6 +306,7 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 <div id="sheetRoot"></div>
 <div id="toastRoot"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (() => {
 'use strict';
@@ -444,6 +446,7 @@ function hoursText(s) {
 }
 function crowdNow(s) {
   const now = Date.now();
+  if (typeof sb !== 'undefined' && sb) { const c = crowdShared[s.id]; return c && now - c.at < 2 * 3600e3 ? { level: c.level, src: `${relTime(c.at)}の投稿` } : null; }
   const mine = store.posts.filter(p => p.spot === s.id && now - p.at < 2 * 3600e3).sort((a, b) => b.at - a.at)[0];
   if (mine) return { level: mine.level, src: `${Math.max(1, Math.round((now - mine.at) / 60000))}分前の投稿` };
   return null;
@@ -557,6 +560,7 @@ function syncMap() {
   SPOTS.forEach(s => {
     let m = markers[s.id];
     if (!m) { m = new google.maps.Marker({ position: { lat: s.lat, lng: s.lng }, map: gmap, title: s.name }); m.addListener('click', () => pickSpot(s.id)); markers[s.id] = m; }
+    m.setPosition({ lat: s.lat, lng: s.lng });
     const cn = crowdNow(s), sel = selected === s.id;
     m.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: sel ? 14 : 11,
       fillColor: isOpen(s) && cn ? cssColor(['--good', '--warn', '--bad'][cn.level]) : cssColor('--muted'),
@@ -618,6 +622,7 @@ function renderSearch() {
   const tchip = (t) => `<button class="chip" data-type="${t}" aria-pressed="${filters.types.includes(t)}">${TYPES[t]}</button>`;
   const cards = cardsHTML(list);
   return `<div class="wrap">
+    ${sb && sbLoadFailed ? '<div class="offline">共有データに接続できませんでした。表示は保存済みの情報で、投稿は送れないことがあります。</div>' : ''}
     <form class="searchbox" role="search" id="searchForm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
       <input type="search" id="q" value="${esc(query)}" placeholder="店名・キーワード(例:学割、カウンター)" aria-label="店名やキーワードで探す" enterkeyhint="search" autocomplete="off">
@@ -652,7 +657,7 @@ function renderSearch() {
 }
 
 function statsOf(s) {
-  const rs = store.reviews.filter(r => r.spot === s.id);
+  const rs = (typeof sb !== 'undefined' && sb) ? (reviewsCache[s.id] || []) : store.reviews.filter(r => r.spot === s.id);
   if (!rs.length) return s.stay !== null ? { n: 0, stay: s.stay, quiet: s.quiet, powerEase: s.powerEase } : { n: 0 };
   const avg = k => rs.reduce((a, r) => a + r[k], 0) / rs.length;
   return { n: rs.length, stay: avg('stay'), quiet: avg('quiet'), powerEase: avg('power') };
@@ -963,8 +968,8 @@ function renderDetail(s) {
   const st = STUDY[s.study];
   const c = crowdNow(s);
   const fav = store.favs.includes(s.id);
-  const myRevs = store.reviews.filter(r => r.spot === s.id).map(r => ({ who: r.who, stay: r.stay, quiet: r.quiet, power: r.power, text: r.text, ago: 'あなたの投稿' }));
-  const revs = [...myRevs, ...(SAMPLE_REVIEWS[s.id] || [])];
+  const revs = sb ? (reviewsCache[s.id] || []).map(r => ({ who: r.who, stay: r.stay, quiet: r.quiet, power: r.power, text: r.text, ago: (r.mine ? 'あなた・' : '') + relTime(r.at) }))
+    : store.reviews.filter(r => r.spot === s.id).map(r => ({ who: r.who, stay: r.stay, quiet: r.quiet, power: r.power, text: r.text, ago: 'あなたの投稿' }));
   const open = isOpen(s);
   const order = s.orderEvery ? `${s.orderEvery}分ごとに1オーダー` : '—';
   return `<div class="overlay" data-close="1"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dTitle">
@@ -1008,6 +1013,7 @@ function renderDetail(s) {
       <div class="sec"><h4>勉強スペースの写真(${getPhotos(s).length})</h4>
         ${getPhotos(s).length ? `<div class="gallery">${getPhotos(s).map(p => `<button class="ph" data-photo="${p.id}" aria-label="写真を拡大:${esc(p.caption)}"><span class="phimg">${photoMedia(p, s)}</span><span class="phbadge ${p.by}">${p.by === 'store' ? 'お店' : '利用者'}</span><span class="cap">${esc(p.caption)}</span></button>`).join('')}</div>` : '<div class="hint">まだ写真がありません。</div>'}
         <button class="btn ghost" id="photoBtn">勉強スペースの写真を投稿する</button>
+        ${sb ? '<div class="hint">写真は、今はこの端末にだけ保存されます(みんなとの共有は準備中です)。</div>' : ''}
       </div>
       <div class="sec"><h4>今の混雑</h4>
         <div>${!open ? '<span class="crowd closed">営業時間外</span>' : c ? `<span class="crowd l${c.level}">${CROWD[c.level]}</span> <span class="hint">${c.src}</span>` : '<span class="crowd closed">混雑情報なし</span> <span class="hint">直近2時間の投稿はまだありません</span>'}</div>
@@ -1015,13 +1021,13 @@ function renderDetail(s) {
         <div class="ask">${open ? '今この場所にいますか?混雑の様子を1タップで教えてください' : '営業時間中に現地にいるとき、混雑の様子を投稿できます'}</div>
         ${crowdWait(s.id) ? `<div class="waitnote">投稿ありがとうございました。この場所には ${hhmm(Date.now() + crowdWait(s.id))} ごろからまた投稿できます(あと約${Math.ceil(crowdWait(s.id) / 60000)}分)</div>` : ''}
         <div class="crowdpost" aria-label="混雑を投稿">${CROWD.map((t, i) => `<button class="l${i}" data-crowd="${i}" ${crowdWait(s.id) ? 'disabled' : ''}>${t}</button>`).join('')}</div>
-        <div class="hint">あなたの投稿で、これから向かう学生の無駄足が減ります。同じ場所への混雑投稿は30分に1回までです。現地にいるときだけ投稿できます(試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます)。</div>
+        <div class="hint">あなたの投稿で、これから向かう学生の無駄足が減ります。同じ場所への混雑投稿は30分に1回までです。現地にいるときだけ投稿できます${sb ? '(投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません)' : '(試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます)'}。</div>
       </div>
       <div class="sec">
         ${s.study === 'ng' ? '<div class="hint">このお店は勉強を受け付けていないため、勉強タイマーは使えません。</div>' : s.study === 'unknown' ? '<div class="hint">勉強してよいかが未確認のため、勉強タイマーは使えません。お店の掲示や店員さんに確認できたら、修正提案で教えてください。</div>' : `<button class="btn" id="startHere">ここで勉強を始める(タイマー)</button>`}
       </div>
       <div class="sec"><h4>レビュー(${revs.length}件)</h4>
-        ${revs.map(r => `<div class="review"><div class="who">${esc(r.who)} ・ ${esc(r.ago)} ・ 滞在${r.stay}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>${esc(r.text)}</div>`).join('') || '<div class="hint">まだレビューがありません。</div>'}
+        ${revs.map(r => `<div class="review"><div class="who">${esc(r.who)} ・ ${esc(r.ago)} ・ 滞在${r.stay}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>${esc(r.text)}</div>`).join('') || `<div class="hint">${sb && !reviewsCache[s.id] ? 'レビューを読み込んでいます…' : 'まだレビューがありません。'}</div>`}
         <button class="btn ghost" id="revBtn">レビューを書く</button>
         <button class="btn ghost" id="editBtn">情報の修正を提案する</button>
       </div>
@@ -1048,6 +1054,7 @@ function renderEditForm(s) {
     <form class="wrap sec" id="editForm">
       <label class="field">どの情報ですか<select id="editWhat"><option>勉強のルール</option><option>滞在の上限・追加注文</option><option>電源・Wi-Fi</option><option>営業時間</option><option>料金</option><option>席数・机の広さ</option><option>閉店した</option></select></label>
       <label class="field">正しい内容<textarea id="editText" rows="3" maxlength="200" placeholder="例:店頭に「土日は勉強不可」の掲示が出ていた"></textarea></label>
+      <label class="field">どうやって確かめましたか<select id="editSrc"><option>自分が利用して確かめた</option><option>店頭や館内の掲示</option><option>お店・施設の人に聞いた</option><option>公式サイト</option><option>その他</option></select></label>
       <button class="btn" type="submit">運営に送る</button>
     </form></div></div>`;
 }
@@ -1057,11 +1064,11 @@ function renderLogin(next) {
     <div class="head wrap"><div style="flex:1"><h2 id="lTitle">投稿にはログインが必要です</h2><div class="sub">検索と閲覧は登録なしで使えます</div></div>
     <button class="iconbtn" data-close="1" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <form class="wrap sec" id="loginForm">
-      <label class="field">ニックネーム<input id="nick" maxlength="20" placeholder="例:ゆう" required></label>
+      <label class="field">ニックネーム<input id="nick" maxlength="20" placeholder="例:ゆう" value="${store.user ? esc(store.user.name) : ''}" required></label>
       <label class="field">学年・立場<select id="grade"><option>高校生</option><option selected>大学生</option><option>大学院生</option><option>社会人</option><option>その他</option></select></label>
       <div class="hint">学年や学校名は表示しません。投稿にはニックネームと立場だけが表示されます。</div>
       <button class="btn" type="submit">はじめる</button>
-      <div class="hint">プロトタイプのため、この情報はこの端末のブラウザにだけ保存されます。</div>
+      <div class="hint">メールアドレスなどの登録は不要です。この端末からの投稿として記録されるため、ブラウザのデータを消すと別の利用者として扱われます。</div>
     </form></div></div>`;
   }
 
@@ -1161,6 +1168,7 @@ const LEVELS = [
 ];
 // 特典の件数は「同じ場所への同じ種類の投稿は1日1件」まで数える(連続投稿で特典を稼げないように)
 const myPostCount = () => {
+  if (typeof sb !== 'undefined' && sb && serverPostCount !== null) return serverPostCount;
   const keys = new Set();
   const add = (kind, list) => list.forEach((p, i) => keys.add(`${kind}|${p.spot}|${p.at ? dateKey(new Date(p.at)) : 'old' + i}`));
   add('crowd', store.posts); add('review', store.reviews); add('edit', store.edits); add('photo', store.photos.filter(p => p.by === 'student'));
@@ -1207,11 +1215,117 @@ function renderMe() {
     ${feedbackCard('試用版はまだ作りかけです。')}
     <div class="tcard"><b>この試用版について</b>
       <div class="hint">金沢大学や各店舗の公式サービスではありません。掲載している情報は2026年10月21日にWeb上の公開情報で確認したもので、分からない項目は「未確認」と表示しています。出かける前に公式情報で確認してください。</div>
-      <div class="hint">お気に入り・投稿・勉強記録は、この端末のブラウザにだけ保存されます(ほかの人には届きません)。正式版では投稿を全員で共有できるようにする予定です。</div>
-      <button class="btn ghost" id="resetBtn">保存したデータを消して最初に戻す</button>
-      <div id="resetConfirm" hidden><div class="hint">お気に入り・投稿・勉強記録をすべて消します。</div><div class="row2"><button class="btn ghost" id="resetNo">やめる</button><button class="btn" id="resetYes" style="background:var(--bad)">消す</button></div></div>
+      <div class="hint">${sb ? '混雑の投稿・レビューはみんなの画面で共有され、修正提案は運営に届きます。お気に入り・写真・勉強記録は、この端末のブラウザにだけ保存されます。' : 'お気に入り・投稿・勉強記録は、この端末のブラウザにだけ保存されます(ほかの人には届きません)。'}</div>
+      <button class="btn ghost" id="resetBtn">この端末の記録を消す</button>
+      <div id="resetConfirm" hidden><div class="hint">お気に入り・写真・勉強記録と、この端末のログインを消します。共有済みの投稿は消えません。</div><div class="row2"><button class="btn ghost" id="resetNo">やめる</button><button class="btn" id="resetYes" style="background:var(--bad)">消す</button></div></div>
     </div>
   </div>`;
+}
+
+// ---------- 共有データ(Supabase) ----------
+// URLとPublishable keyはページに書き込む前提の情報。データはデータベース側のアクセスのルールで守る
+const SUPA_URL = 'https://zsqyjrerrnrrovazoump.supabase.co';
+const SUPA_KEY = 'sb_publishable_NfjKqQNsZFNSAe39umrrXg_rfEyFc0u';
+let sb = null, sbLoadFailed = false, serverPostCount = null;
+let crowdShared = {};
+const reviewsCache = {};
+const relTime = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'たった今' : m < 60 ? `${m}分前` : m < 1440 ? `${Math.round(m / 60)}時間前` : `${Math.round(m / 1440)}日前`; };
+function initShared() {
+  try { if (window.supabase && SUPA_URL.indexOf('https://') === 0) sb = window.supabase.createClient(SUPA_URL, SUPA_KEY); } catch (e) { sb = null; }
+  if (!sb) return;
+  render();
+  loadSpots(); refreshCrowd(); restoreUser();
+  setInterval(refreshCrowd, 120000);
+}
+async function loadSpots() {
+  try {
+    const { data, error } = await sb.from('spots').select('id,name,type,lat,lng,place_id,data').eq('published', true);
+    if (error || !data || !data.length) throw error || new Error('empty');
+    const next = data.map(r => Object.assign({ quiet: null, powerEase: null, stay: null, busyAt: [], studyFrom: null, studyTo: null, coupon: '', paused: false, ownerSet: false },
+      r.data || {}, { id: r.id, name: r.name, type: r.type, lat: r.lat, lng: r.lng, placeId: r.place_id }))
+      .filter(x => TYPES[x.type]);
+    SPOTS.splice(0, SPOTS.length, ...next);
+    sbLoadFailed = false;
+  } catch (e) { sbLoadFailed = true; }
+  render(); if (sheet && sheet.kind === 'detail') renderSheet();
+}
+async function refreshCrowd() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.rpc('get_crowd_now');
+    if (error) return;
+    crowdShared = {};
+    (data || []).forEach(r => { crowdShared[r.spot_id] = { level: r.level, at: Date.parse(r.reported_at) }; });
+  } catch (e) { return; }
+  if (tab === 'search') updateResults();
+  if (sheet && sheet.kind === 'detail') renderSheet();
+}
+async function restoreUser() {
+  try {
+    const { data } = await sb.auth.getSession();
+    const u = data && data.session && data.session.user;
+    if (!u) return;
+    const { data: p } = await sb.from('profiles').select('nickname,role').eq('id', u.id).maybeSingle();
+    if (p) { store.user = { name: p.nickname, grade: p.role, uid: u.id }; save(); refreshCount(); render(); }
+  } catch (e) {}
+}
+async function refreshCount() {
+  if (!sb) return;
+  try { const { data, error } = await sb.rpc('my_post_count'); if (!error) { serverPostCount = data; if (tab === 'me') render(); } } catch (e) {}
+}
+async function signUpShared(name, role) {
+  try {
+    const { data: sd } = await sb.auth.getSession();
+    let user = sd && sd.session && sd.session.user;
+    if (!user) {
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error) { toast('登録できませんでした。少し時間をおいて、もう一度お試しください'); return false; }
+      user = data.user;
+    }
+    const { error } = await sb.from('profiles').upsert({ id: user.id, nickname: name, role });
+    if (error) { toast('ニックネームを保存できませんでした。もう一度お試しください'); return false; }
+    store.user = { name, grade: role, uid: user.id }; save(); refreshCount();
+    return true;
+  } catch (e) { toast('通信できませんでした。電波のよい場所でもう一度お試しください'); return false; }
+}
+async function loadReviews(spotId) {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('reviews').select('user_id,stay_min,quiet,power,body,created_at')
+      .eq('spot_id', spotId).eq('status', 'published').order('created_at', { ascending: false }).limit(30);
+    if (error) return;
+    const ids = [...new Set(data.map(r => r.user_id))], names = {};
+    if (ids.length) {
+      const { data: ps } = await sb.from('profiles').select('id,nickname,role').in('id', ids);
+      (ps || []).forEach(p => { names[p.id] = `${p.nickname}(${p.role})`; });
+    }
+    reviewsCache[spotId] = data.map(r => ({ who: names[r.user_id] || '利用者', stay: r.stay_min, quiet: r.quiet, power: r.power,
+      text: r.body || '(コメントなし)', at: Date.parse(r.created_at), mine: !!(store.user && r.user_id === store.user.uid) }));
+  } catch (e) { return; }
+  if (sheet && sheet.kind === 'detail' && sheet.spot === spotId) renderSheet();
+}
+function postCrowdShared(s, lv) {
+  if (!sb) {
+    store.posts.push({ spot: s.id, level: lv, at: Date.now() }); save(); openSheet('detail', s.id); render();
+    toast(`「${CROWD[lv]}」を投稿しました。ありがとうございます`); return;
+  }
+  if (!navigator.geolocation) { toast('この端末では位置情報が使えないため、混雑を投稿できません'); return; }
+  toast('現地にいるか確認しています(位置は確認にだけ使い、保存しません)');
+  navigator.geolocation.getCurrentPosition(async p => {
+    let error = null;
+    try { ({ error } = await sb.rpc('post_crowd', { p_spot: s.id, p_level: lv, p_lat: p.coords.latitude, p_lng: p.coords.longitude })); }
+    catch (e) { error = { message: '通信できませんでした。もう一度お試しください' }; }
+    if (error) {
+      const h = error.hint || '';
+      if (h.indexOf('wait:') === 0) { store.posts.push({ spot: s.id, level: lv, at: +h.slice(5) * 1000 - CROWD_INTERVAL_MIN * 60000 }); save(); }
+      toast(h === 'too_far' ? `${s.name}から離れているようです。現地(約300m以内)にいるときに投稿してください` : (error.message || '投稿できませんでした'));
+      openSheet('detail', s.id); return;
+    }
+    store.posts.push({ spot: s.id, level: lv, at: Date.now() }); save();
+    await refreshCrowd(); refreshCount(); openSheet('detail', s.id); render();
+    toast(`「${CROWD[lv]}」を投稿しました。みんなの画面に反映されています`);
+  }, err => toast(err && err.code === 1 ? '混雑の投稿には、現地にいるかを確かめるため位置情報の許可が必要です(保存しません)' : '位置を確認できませんでした。もう一度お試しください'),
+  { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 }
 
 // ---------- rendering & events ----------
@@ -1252,7 +1366,7 @@ function renderSheet() {
   const s = spotById(sheet.spot);
   sheetRoot.innerHTML = sheet.kind === 'detail' ? renderDetail(s) : sheet.kind === 'review' ? renderReviewForm(s) : sheet.kind === 'edit' ? renderEditForm(s) : sheet.kind === 'photo' ? renderPhotoView(s, sheet.photo) : sheet.kind === 'photoForm' ? renderPhotoForm(s) : renderLogin();
 }
-function openSheet(kind, spot, extra) { sheet = Object.assign({ kind, spot }, extra || {}); renderSheet(); }
+function openSheet(kind, spot, extra) { sheet = Object.assign({ kind, spot }, extra || {}); renderSheet(); if (kind === 'detail' && spot) loadReviews(spot); }
 function closeSheet() { sheet = null; renderSheet(); }
 
 let toastTimer;
@@ -1262,7 +1376,7 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { root.innerHTML = ''; }, 3200);
 }
 function requireLogin(after) {
-  if (store.user) { after(); return; }
+  if (store.user && (!sb || store.user.uid)) { after(); return; }
   const back = sheet ? Object.assign({}, sheet) : null;
   openSheet('login', back && back.spot, { after, back });
 }
@@ -1314,7 +1428,7 @@ view.addEventListener('click', e => {
   if (t.closest('#loginBtn')) { requireLogin(() => render()); return; }
   if (t.closest('#resetBtn')) { document.getElementById('resetConfirm').hidden = false; t.closest('#resetBtn').hidden = true; return; }
   if (t.closest('#resetNo')) { render(); return; }
-  if (t.closest('#resetYes')) { try { localStorage.removeItem(KEY); } catch (err) {} location.reload(); return; }
+  if (t.closest('#resetYes')) { try { localStorage.removeItem(KEY); Object.keys(localStorage).filter(k => k.indexOf('sb-') === 0).forEach(k => localStorage.removeItem(k)); } catch (err) {} location.reload(); return; }
 });
 (document.querySelector('.modebar') || document.createElement('div')).addEventListener('click', e => {
   const b = e.target.closest('[data-mode]'); if (!b || b.dataset.mode === mode) return;
@@ -1395,7 +1509,7 @@ sheetRoot.addEventListener('click', e => {
   if (cb) {
     const lv = +cb.dataset.crowd;
     if (crowdWait(s.id)) { toast(`この場所への混雑投稿は30分に1回までです。${hhmm(Date.now() + crowdWait(s.id))} ごろからまた投稿できます`); return; }
-    requireLogin(() => { if (crowdWait(s.id)) { openSheet('detail', s.id); return; } store.posts.push({ spot: s.id, level: lv, at: Date.now() }); save(); openSheet('detail', s.id); render(); toast(`「${CROWD[lv]}」を投稿しました。ありがとうございます`); });
+    requireLogin(() => { if (crowdWait(s.id)) { openSheet('detail', s.id); return; } postCrowdShared(s, lv); });
     return;
   }
   if (t.closest('#startHere')) {
@@ -1418,8 +1532,12 @@ sheetRoot.addEventListener('submit', e => {
   const f = e.target;
   if (f.id === 'loginForm') {
     const name = document.getElementById('nick').value.trim(); if (!name) return;
-    store.user = { name, grade: document.getElementById('grade').value }; save();
-    const after = sheet.after; sheet = sheet.back; renderSheet(); toast(`${name}さん、ようこそ`); if (after) after(); render(); return;
+    const role = document.getElementById('grade').value;
+    const done = () => { const after = sheet.after; sheet = sheet.back; renderSheet(); toast(`${name}さん、ようこそ`); if (after) after(); render(); };
+    if (!sb) { store.user = { name, grade: role }; save(); done(); return; }
+    const btn = f.querySelector('button[type="submit"]'); btn.disabled = true; btn.textContent = '登録しています…';
+    signUpShared(name, role).then(ok => { if (ok) done(); else { btn.disabled = false; btn.textContent = 'はじめる'; } });
+    return;
   }
   const s = spotById(sheet.spot);
   if (f.id === 'photoForm') {
@@ -1435,12 +1553,27 @@ sheetRoot.addEventListener('submit', e => {
   if (f.id === 'revForm') {
     const pick = k => +f.querySelector(`[data-stars="${k}"] [aria-pressed="true"]`).dataset.v;
     const text = document.getElementById('revText').value.trim() || '(コメントなし)';
-    store.reviews.push({ spot: s.id, at: Date.now(), who: `${store.user.name}(${store.user.grade})`, stay: +document.getElementById('revStay').value, quiet: pick('quiet'), power: pick('power'), text });
-    save(); openSheet('detail', s.id); render(); toast('レビューを投稿しました'); return;
+    const rec = { spot: s.id, at: Date.now(), who: `${store.user.name}(${store.user.grade})`, stay: +document.getElementById('revStay').value, quiet: pick('quiet'), power: pick('power'), text };
+    if (!sb) { store.reviews.push(rec); save(); openSheet('detail', s.id); render(); toast('レビューを投稿しました'); return; }
+    const btn = f.querySelector('button[type="submit"]'); btn.disabled = true; btn.textContent = '送信しています…';
+    sb.from('reviews').insert({ spot_id: s.id, stay_min: rec.stay, quiet: rec.quiet, power: rec.power, body: document.getElementById('revText').value.trim() })
+      .then(({ error }) => {
+        if (error) { btn.disabled = false; btn.textContent = '投稿する'; toast(/上限/.test(error.message || '') ? error.message : 'レビューを投稿できませんでした。もう一度お試しください'); return; }
+        store.reviews.push(rec); save(); refreshCount(); openSheet('detail', s.id); render(); toast('レビューを投稿しました。みんなの画面に表示されます');
+      }, () => { btn.disabled = false; btn.textContent = '投稿する'; toast('通信できませんでした。もう一度お試しください'); });
+    return;
   }
   if (f.id === 'editForm') {
-    store.edits.push({ spot: s.id, what: document.getElementById('editWhat').value, text: document.getElementById('editText').value.trim(), at: Date.now() });
-    save(); openSheet('detail', s.id); render(); toast('運営に送りました。確認後に反映されます'); return;
+    const rec = { spot: s.id, what: document.getElementById('editWhat').value, text: document.getElementById('editText').value.trim(), at: Date.now() };
+    if (!rec.text) { toast('正しい内容を書いてください'); return; }
+    if (!sb) { store.edits.push(rec); save(); openSheet('detail', s.id); render(); toast('運営に送りました。確認後に反映されます'); return; }
+    const btn = f.querySelector('button[type="submit"]'); btn.disabled = true; btn.textContent = '送信しています…';
+    sb.from('edit_requests').insert({ spot_id: s.id, field: rec.what, body: rec.text, source: document.getElementById('editSrc').value })
+      .then(({ error }) => {
+        if (error) { btn.disabled = false; btn.textContent = '運営に送る'; toast(/上限/.test(error.message || '') ? error.message : '送信できませんでした。もう一度お試しください'); return; }
+        store.edits.push(rec); save(); refreshCount(); openSheet('detail', s.id); render(); toast('運営に届きました。確認後に反映します');
+      }, () => { btn.disabled = false; btn.textContent = '運営に送る'; toast('通信できませんでした。もう一度お試しください'); });
+    return;
   }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheet) closeSheet(); });
@@ -1458,6 +1591,7 @@ setInterval(() => {
 }, 1000);
 
 render();
+initShared();
 })();
 </script>
 
