@@ -76,8 +76,31 @@ header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block:
 
 /* filters */
 .filters { margin-top: 12px; display: grid; gap: 8px; }
-.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
-.chips::-webkit-scrollbar { display: none; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.searchrow { margin-top: 12px; display: flex; gap: 8px; align-items: stretch; }
+.searchrow .searchbox { margin-top: 0; flex: 1; min-width: 0; }
+.filterbtn { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 12px; font-size: 14px; font-weight: 700; color: var(--ink); }
+.filterbtn svg { width: 18px; height: 18px; }
+.filterbtn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fbadge { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 12px; font-family: var(--f-mono); text-align: center; }
+.activef { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.activef .on { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
+.activef .reset { border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 3px 4px; }
+.filterpanel { margin-top: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 14px; box-shadow: var(--shadow); }
+.filterpanel .fph { display: flex; align-items: center; justify-content: space-between; }
+.filterpanel .fph b { font-size: 16px; }
+.filterpanel h5 { margin: 0 0 6px; font-size: 12.5px; letter-spacing: .06em; color: var(--muted); }
+.filterpanel select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; font-size: 15px; }
+.filterpanel .pf { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+.filterpanel .pf .btn { width: 100%; }
+.fbackdrop { display: none; }
+@media (max-width: 600px) {
+  .filterpanel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 36; margin: 0; max-height: 80%; overflow-y: auto; border-radius: 16px 16px 0 0; border-bottom: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .fbackdrop { display: block; position: fixed; inset: 0; z-index: 35; background: rgba(10, 14, 22, .42); }
+  .filterbtn .fl { display: none; }
+}
+.countrow { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
 .chip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .sortrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
@@ -657,10 +680,38 @@ function updateResults() {
   const list = filtered();
   const m = document.getElementById('mapArea'), c = document.getElementById('resCount'), l = document.getElementById('resList'), sg = document.getElementById('suggest'), x = document.getElementById('qClear');
   if (!m) return;
-  syncMap(); c.textContent = `${list.length}件`; l.innerHTML = cardsHTML(list) || emptyHTML();
+  syncMap(); c.textContent = `${list.length}件`; const fs = document.getElementById('fShow'); if (fs) fs.textContent = `${list.length}件を表示`; l.innerHTML = cardsHTML(list) || emptyHTML();
   sg.hidden = !!query; x.hidden = !query;
 }
 
+const SORTS = { near: '近い順', empty: '空いている順', quiet: '静かな順', stay: '長くいられる順', seats: '勉強席が多い順' };
+const FLAGS = [['open', '営業中'], ['power', '電源あり'], ['wifi', 'Wi-Fi'], ['long', '2時間以上OK'], ['quiet', '静か'], ['wide', '広い机'], ['free', '無料']];
+let filterOpen = false;
+// 初期設定から変えている条件の数(並び順は数えない。「勉強不可を隠す」は初期でオン)
+const activeCount = () => filters.types.length + (filters.within ? 1 : 0) + FLAGS.filter(([k]) => filters[k]).length + (filters.studyOnly ? 0 : 1) + (areaBounds ? 1 : 0);
+function activeChipsHTML() {
+  const on = [
+    ...filters.types.map(t => [`type:${t}`, TYPES[t]]),
+    ...(filters.within ? [['within', `徒歩${filters.within}分以内`]] : []),
+    ...FLAGS.filter(([k]) => filters[k]),
+    ...(filters.studyOnly ? [] : [['studyOnly', '勉強不可も表示']]),
+    ...(areaBounds ? [['area', '表示中のエリアのみ']] : [])
+  ];
+  if (!on.length) return '';
+  return `<div class="activef" aria-label="選んでいる条件">${on.map(([k, l]) => `<button type="button" class="on" data-unf="${k}" aria-label="${esc(l)}の条件を外す">${esc(l)} <span aria-hidden="true">×</span></button>`).join('')}<button type="button" class="reset" data-freset="1">すべて解除</button></div>`;
+}
+function filterPanelHTML(n) {
+  const chip = (key, label) => `<button type="button" class="chip" data-f="${key}" aria-pressed="${!!filters[key]}">${label}</button>`;
+  return `<div class="fbackdrop" data-fclose="1"></div>
+    <div class="filterpanel" id="filterPanel" role="dialog" aria-label="絞り込み">
+      <div class="fph"><b>絞り込み</b><button type="button" class="iconbtn" data-fclose="1" aria-label="絞り込みを閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div><h5>種類</h5><div class="chips">${Object.keys(TYPES).map(t => `<button type="button" class="chip" data-type="${t}" aria-pressed="${filters.types.includes(t)}">${TYPES[t]}</button>`).join('')}</div></div>
+      <div><h5>距離(${esc(baseName())}から)</h5><div class="chips">${[5, 10, 15].map(m => `<button type="button" class="chip" data-within="${m}" aria-pressed="${filters.within === m}">徒歩${m}分以内</button>`).join('')}</div></div>
+      <div><h5>設備・条件</h5><div class="chips">${FLAGS.map(([k, l]) => chip(k, l)).join('')}${chip('studyOnly', '勉強不可を隠す')}</div></div>
+      <div><h5>並び順</h5><select id="sortSel" aria-label="並び順">${Object.keys(SORTS).map(k => `<option value="${k}" ${filters.sort === k ? 'selected' : ''}>${SORTS[k]}</option>`).join('')}</select></div>
+      <div class="pf"><button type="button" class="btn ghost" data-freset="1">すべて解除</button><button type="button" class="btn" data-fclose="1" id="fShow">${n}件を表示</button></div>
+    </div>`;
+}
 function renderSearch() {
   const list = filtered();
   const chip = (key, label) => `<button class="chip" data-f="${key}" aria-pressed="${!!filters[key]}">${label}</button>`;
@@ -668,11 +719,16 @@ function renderSearch() {
   const cards = cardsHTML(list);
   return `<div class="wrap">
     ${sb && sbLoadFailed ? '<div class="offline">共有データに接続できませんでした。表示は保存済みの情報で、投稿は送れないことがあります。</div>' : ''}
-    <form class="searchbox" role="search" id="searchForm">
+    <div class="searchrow">
+      <form class="searchbox" role="search" id="searchForm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
       <input type="search" id="q" value="${esc(query)}" placeholder="店名・キーワード(例:学割、カウンター)" aria-label="店名やキーワードで探す" enterkeyhint="search" autocomplete="off">
       <button type="button" class="clear" id="qClear" aria-label="検索の言葉を消す" ${query ? '' : 'hidden'}>×</button>
     </form>
+      <button type="button" class="filterbtn" id="filterBtn" aria-expanded="${filterOpen}" aria-controls="filterPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span class="fl">絞り込み</span>${activeCount() ? `<span class="fbadge">${activeCount()}</span>` : ''}</button>
+    </div>
+    ${activeChipsHTML()}
+    ${filterOpen ? filterPanelHTML(list.length) : ''}
     <div class="suggest" id="suggest" ${query ? 'hidden' : ''}><span>よく使われる言葉</span>${SUGGEST.map(w => `<button type="button" data-q="${w}">${w}</button>`).join('')}</div>
     <div class="baserow" role="group" aria-label="距離の基準"><span>どこから</span><span class="seg">
       <button type="button" data-base="here" aria-pressed="${baseKind === 'here'}">現在地</button><button type="button" data-base="univ" aria-pressed="${baseKind === 'univ'}">中央図書館</button><button type="button" data-base="station" aria-pressed="${baseKind === 'station'}">もりの里</button></span>
@@ -683,19 +739,7 @@ function renderSearch() {
     </div>
       <div class="legend"><span><i style="background:var(--good)"></i>〜49%</span><span><i style="background:var(--warn)"></i>50〜79%</span><span><i style="background:var(--bad)"></i>80%〜・待ちあり</span><span><i style="background:var(--muted)"></i>情報なし・時間外</span><span><i style="background:var(--accent)"></i>${esc(baseName())}</span><span>ピンをタップで一覧の位置へ</span></div>
     </div>
-    <div class="filters">
-      <div class="chips" aria-label="種別">${Object.keys(TYPES).map(tchip).join('')}</div>
-      <div class="chips" aria-label="距離">${[5, 10, 15].map(m => `<button class="chip" data-within="${m}" aria-pressed="${filters.within === m}">徒歩${m}分以内</button>`).join('')}${areaBounds ? '<button class="chip area" data-area-clear="1" aria-label="表示中のエリアの絞り込みを外す">表示中のエリアのみ ×</button>' : ''}</div>
-      <div class="chips" aria-label="条件">${chip('open', '営業中')}${chip('power', '電源あり')}${chip('wifi', 'Wi-Fi')}${chip('long', '2時間以上OK')}${chip('quiet', '静か')}${chip('wide', '広い机')}${chip('free', '無料')}${chip('studyOnly', '勉強不可を隠す')}</div>
-      <div class="sortrow"><span id="resCount">${list.length}件</span>
-        <label>並び順 <select id="sortSel">
-          <option value="near" ${filters.sort === 'near' ? 'selected' : ''}>近い順</option>
-          <option value="empty" ${filters.sort === 'empty' ? 'selected' : ''}>空いている順</option>
-          <option value="quiet" ${filters.sort === 'quiet' ? 'selected' : ''}>静かな順</option>
-          <option value="stay" ${filters.sort === 'stay' ? 'selected' : ''}>長くいられる順</option>
-          <option value="seats" ${filters.sort === 'seats' ? 'selected' : ''}>勉強席が多い順</option>
-        </select></label></div>
-    </div>
+    <div class="countrow"><span id="resCount">${list.length}件</span><span>並び順:${SORTS[filters.sort]}</span></div>
     <div class="list" id="resList">${cards || emptyHTML()}</div>
     ${feedbackCard('')}
   </div>`;
@@ -1463,6 +1507,19 @@ view.addEventListener('click', e => {
   if (sp) {
     selected = sp.dataset.spot; if (tab === 'search') { panTo(spotById(selected)); render(); } openSheet('detail', selected); return;
   }
+  if (t.closest('#filterBtn')) { filterOpen = !filterOpen; render(); return; }
+  if (t.closest('[data-fclose]')) { filterOpen = false; render(); return; }
+  if (t.closest('[data-freset]')) { const sort = filters.sort; filters = Object.assign({}, DEFAULT_FILTERS, { types: [], sort }); areaBounds = null; store.filters = filters; save(); render(); return; }
+  const unf = t.closest('[data-unf]');
+  if (unf) {
+    const k = unf.dataset.unf;
+    if (k.indexOf('type:') === 0) filters.types = filters.types.filter(x => x !== k.slice(5));
+    else if (k === 'within') filters.within = 0;
+    else if (k === 'studyOnly') filters.studyOnly = true;
+    else if (k === 'area') areaBounds = null;
+    else filters[k] = false;
+    store.filters = filters; save(); render(); return;
+  }
   const wb = t.closest('[data-within]');
   if (wb) { const m = +wb.dataset.within; filters.within = filters.within === m ? 0 : m; store.filters = filters; save(); render(); return; }
   if (t.closest('[data-area-clear]')) { areaBounds = null; render(); return; }
@@ -1649,7 +1706,7 @@ sheetRoot.addEventListener('submit', e => {
     return;
   }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheet) closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (sheet) closeSheet(); else if (filterOpen) { filterOpen = false; render(); } });
 
 // tick
 setInterval(() => {
