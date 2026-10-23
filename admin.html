@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ベンキョバ 運営</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 利用者画面と同じ色と書体で、運営の作業を「確認待ち/スポット/レビュー」の3つのタブにまとめる */
+:root {
+  --bg: #f1f3ee; --surface: #ffffff; --ink: #1c2332; --muted: #5d6576; --line: #d8dcd3; --grid: #e3e7de;
+  --accent: #2a47c4; --accent-soft: #e2e7fa; --mark: #f4d54a; --mark-ink: #3a2f00;
+  --good: #2c8a57; --warn: #b97c0e; --bad: #c4423a; --good-soft: #e1f2e8; --warn-soft: #fbefd6; --bad-soft: #f9e2df;
+  --f-display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #13161c; --surface: #1b1f27; --ink: #e7eaf0; --muted: #9aa2b2; --line: #2b313c; --grid: #1f242c;
+  --accent: #8fa3ff; --accent-soft: #232a47; --mark: #c9a730; --mark-ink: #1a1500;
+  --good: #5bbf88; --warn: #e0aa45; --bad: #ee7067; --good-soft: #17301f; --warn-soft: #33270f; --bad-soft: #3a1c1a; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--f-body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.wrap { max-width: 760px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+header .wrap { display: flex; align-items: center; gap: 10px; padding-block: 10px; flex-wrap: wrap; }
+.logo { font-family: var(--f-display); font-size: 20px; line-height: 1; }
+.logo span { background: linear-gradient(transparent 58%, var(--mark) 58%); padding: 0 2px; }
+.role { font-size: 12px; font-weight: 700; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; color: var(--muted); }
+.who { margin-left: auto; font-size: 12.5px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabs { display: flex; gap: 4px; padding-block: 0 8px; overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 6px 12px; border-radius: 8px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.tabs button[aria-current="page"] { background: var(--ink); color: var(--surface); }
+.tabs .n { display: inline-block; min-width: 20px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 12px; font-family: var(--f-mono); }
+main { padding-block: 16px 48px; display: grid; gap: 14px; }
+h1 { font-size: 21px; font-weight: 700; margin: 0; letter-spacing: .04em; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.hint { font-size: 12.5px; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+.tile .v { font-family: var(--f-mono); font-weight: 600; font-size: 24px; font-variant-numeric: tabular-nums; }
+.tile .v.hot { color: var(--bad); }
+.tile .k { font-size: 12px; color: var(--muted); }
+.item { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; min-width: 0; }
+.item:first-of-type { border-top: 0; padding-top: 0; }
+.meta { font-size: 12.5px; color: var(--muted); }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; font-weight: 700; font-size: 14px; }
+.btn.main { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+.pill.ok { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.mute { background: var(--grid); color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spotrow { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+.spotrow b { min-width: 0; }
+form.grid, .grid { display: grid; gap: 12px; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; display: grid; gap: 10px; min-width: 0; }
+legend { font-weight: 700; font-size: 13.5px; padding: 0 6px; }
+label.f { display: grid; gap: 4px; font-size: 13px; min-width: 0; }
+label.f > span { color: var(--muted); }
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="time"], select, textarea {
+  width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 16px; min-width: 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 480px) { .three { grid-template-columns: 1fr 1fr; } }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.req { border-radius: 10px; padding: 10px 12px; background: var(--warn-soft); font-size: 14px; display: grid; gap: 4px; }
+.posmap { height: 280px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--grid); }
+.mono { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sheet { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.sheet .bar { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
+.sheet .bar .wrap { display: flex; align-items: center; gap: 10px; padding-block: 10px; }
+.sheet .bar h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 60; background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: calc(100% - 32px); }
+.empty { color: var(--muted); font-size: 14px; }
+.login { max-width: 420px; margin: 40px auto; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="logo"><span>ベンキョバ</span></div><span class="role">運営</span>
+    <div class="who" id="who"></div>
+    <button class="btn" id="logoutBtn" hidden>ログアウト</button>
+  </div>
+  <div class="wrap tabs" id="tabs" hidden role="tablist">
+    <button data-tab="queue">確認待ち<span class="n" id="nQueue" hidden></span></button>
+    <button data-tab="spots">スポット</button>
+    <button data-tab="reviews">レビュー</button>
+  </div>
+</header>
+<main class="wrap" id="main"><div class="card"><div class="empty">読み込んでいます…</div></div></main>
+<div id="sheetRoot"></div>
+<div id="toastRoot"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(() => {
+'use strict';
+// 利用者画面と同じ接続先。キーは公開前提のもので、運営の操作はデータベース側のルール(運営者表)で守られている
+const SUPA_URL = 'https://zsqyjrerrnrrovazoump.supabase.co';
+const SUPA_KEY = 'sb_publishable_NfjKqQNsZFNSAe39umrrXg_rfEyFc0u';
+const MAPS_KEY = 'AIzaSyAu7fZ4SmKOnOutR8DS7VOuAGFwOx-HDQw';
+
+const TYPES = { univ_lib: '大学図書館', canteen: '学内食堂', cafe: 'カフェ', public_lib: '公共図書館', study_room: '有料自習室', cowork: 'コワーキング' };
+const STUDY = { welcome: '勉強歓迎', ok: '勉強OK', busy_ng: '時間帯により勉強不可', ng: '勉強不可', unknown: '勉強可否は未確認' };
+const POWER = { all: '全席あり', some: '一部あり', none: 'なし', unknown: '未確認' };
+const DESK = { wide: '広い(PCとノートを並べられる)', normal: 'ふつう(PCかノートのどちらか)', narrow: '狭い(本1冊とカップ程度)' };
+const DAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const SRC = ['Webの公開情報', '製作者の利用経験', 'Webの公開情報+製作者の利用経験', '利用者の情報+運営が確認'];
+const FIELD_HINT = { '勉強のルール': 'study', '滞在の上限・追加注文': 'limit', '電源・Wi-Fi': 'power', '営業時間': 'hours', '料金': 'price', '席数・机の広さ': 'seats', '閉店した': 'basic' };
+const CENTER = { lat: 36.548807, lng: 136.7108479 };
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const jstNow = () => new Date(Date.now() + 9 * 3600e3);
+const todayJST = () => { const d = jstNow(); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+const startOfTodayISO = () => { const d = jstNow(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 9 * 3600e3).toISOString(); };
+const fmtWhen = iso => { const d = new Date(Date.parse(iso) + 9 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${d.getUTCHours()}:${pad(d.getUTCMinutes())}`; };
+const toTime = h => h == null || isNaN(h) ? '' : `${pad(Math.floor(h))}:${pad(Math.round((h % 1) * 60))}`;
+const fromTime = t => { if (!t) return null; const [h, m] = t.split(':').map(Number); return h + (m || 0) / 60; };
+const numOrNull = v => v === '' || v == null ? null : Number(v);
+
+let sb = null, session = null, tab = 'queue';
+let spots = [], requests = [], reviews = [], names = {}, counts = {};
+const main = document.getElementById('main'), sheetRoot = document.getElementById('sheetRoot');
+
+let toastTimer;
+function toast(msg) {
+  const r = document.getElementById('toastRoot');
+  r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { r.innerHTML = ''; }, 3200);
+}
+const spotName = id => (spots.find(s => s.id === id) || {}).name || (id ? id : '(新しいスポットの提案)');
+
+// ---------- ログイン ----------
+function renderLogin(msg) {
+  document.getElementById('tabs').hidden = true;
+  document.getElementById('logoutBtn').hidden = !session;
+  document.getElementById('who').textContent = session ? (session.user.email || '') : '';
+  main.innerHTML = `<div class="card login">
+    <h1>運営者ログイン</h1>
+    ${msg ? `<div class="req">${esc(msg)}</div>` : ''}
+    ${session ? '' : `<form class="grid" id="loginForm">
+      <label class="f"><span>メールアドレス</span><input type="email" id="email" autocomplete="username" required></label>
+      <label class="f"><span>パスワード</span><input type="password" id="password" autocomplete="current-password" required></label>
+      <button class="btn main" type="submit">ログイン</button>
+    </form>`}
+    <div class="hint">このページは運営者だけが使えます。利用者向けのページは <a href="./">こちら</a>。</div>
+  </div>`;
+}
+async function start() {
+  if (!window.supabase) { renderLogin('共有データの仕組みを読み込めませんでした。通信状態を確認して、ページを開き直してください。'); return; }
+  sb = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'benkyoba-admin-auth' } });
+  const { data } = await sb.auth.getSession();
+  session = data && data.session;
+  if (!session) { renderLogin(); return; }
+  await afterLogin();
+}
+async function afterLogin() {
+  const { data: ok, error } = await sb.rpc('is_admin');
+  document.getElementById('logoutBtn').hidden = false;
+  document.getElementById('who').textContent = session.user.email || '';
+  if (error || !ok) { renderLogin('このアカウントは運営者として登録されていません。Supabaseの admins 表に登録してから、もう一度ログインしてください。'); return; }
+  document.getElementById('tabs').hidden = false;
+  await loadAll();
+  render();
+}
+
+// ---------- データ ----------
+async function loadAll() {
+  const since = startOfTodayISO();
+  const [sp, rq, rv, c1, c2] = await Promise.all([
+    sb.from('spots').select('id,name,type,lat,lng,place_id,data,published,updated_at').order('name'),
+    sb.from('edit_requests').select('id,spot_id,field,body,source,user_id,status,created_at').eq('status', 'pending').order('created_at', { ascending: true }),
+    sb.from('reviews').select('id,spot_id,user_id,stay_min,quiet,power,body,status,created_at').order('created_at', { ascending: false }).limit(50),
+    sb.from('crowd_reports').select('id', { count: 'exact', head: true }).gte('created_at', since),
+    sb.from('reviews').select('id', { count: 'exact', head: true }).gte('created_at', since)
+  ]);
+  if (sp.error || rq.error || rv.error) toast('一部のデータを読み込めませんでした。ページを開き直してください');
+  spots = sp.data || []; requests = rq.data || []; reviews = rv.data || [];
+  counts = { crowd: c1.count || 0, reviews: c2.count || 0 };
+  const ids = [...new Set([...requests, ...reviews].map(r => r.user_id))];
+  names = {};
+  if (ids.length) {
+    const { data: ps } = await sb.from('profiles').select('id,nickname,role').in('id', ids);
+    (ps || []).forEach(p => { names[p.id] = `${p.nickname}(${p.role})`; });
+  }
+}
+const needsPos = s => !(s.data && s.data.posSource === 'admin');
+
+// ---------- 画面 ----------
+function render() {
+  document.querySelectorAll('#tabs [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
+  const nq = document.getElementById('nQueue'); nq.hidden = !requests.length; nq.textContent = requests.length;
+  main.innerHTML = tab === 'queue' ? renderQueue() : tab === 'spots' ? renderSpots() : renderReviews();
+}
+function renderQueue() {
+  const pos = spots.filter(needsPos);
+  return `<h1>確認待ち</h1>
+  <div class="tiles">
+    <div class="tile"><div class="v ${requests.length ? 'hot' : ''}">${requests.length}</div><div class="k">未処理の修正提案</div></div>
+    <div class="tile"><div class="v ${pos.length ? 'hot' : ''}">${pos.length}</div><div class="k">位置の登録し直し(11/20まで)</div></div>
+    <div class="tile"><div class="v">${counts.crowd}</div><div class="k">今日の混雑投稿</div></div>
+    <div class="tile"><div class="v">${counts.reviews}</div><div class="k">今日のレビュー</div></div>
+  </div>
+  <div class="card"><h2>修正提案(${requests.length})</h2>
+    ${requests.map(r => `<div class="item">
+      <div class="meta">${esc(spotName(r.spot_id))} ・ ${esc(r.field)} ・ ${esc(names[r.user_id] || '利用者')} ・ ${fmtWhen(r.created_at)}</div>
+      <div class="body">${esc(r.body)}</div>
+      <div class="meta">確かめ方:${esc(r.source || '記載なし')}</div>
+      <div class="acts">
+        ${r.spot_id && spots.some(s => s.id === r.spot_id) ? `<button class="btn main" data-apply="${r.id}">スポットを直して反映</button>` : `<button class="btn main" data-newfrom="${r.id}">新しいスポットとして登録</button>`}
+        <button class="btn" data-mark="${r.id}" data-status="applied">直さずに反映済みにする</button>
+        <button class="btn danger" data-mark="${r.id}" data-status="rejected">却下</button>
+      </div></div>`).join('') || '<div class="empty">未処理の修正提案はありません。</div>'}
+    <div class="hint">内容が正しいか分からないときは、現地や公式サイトで確かめてから反映してください。</div>
+  </div>
+  ${pos.length ? `<div class="card"><h2>位置の登録し直しが必要なスポット(${pos.length})</h2>
+    <div class="hint">今の位置はGoogleの場所情報を参考にした仮の値です。規約上30日までしか保存できないため、11月20日ごろまでに地図でピンを確認して保存してください。</div>
+    ${pos.map(s => `<div class="item spotrow"><b>${esc(s.name)}</b><button class="btn" data-edit="${s.id}" data-focus="pos">位置を登録</button></div>`).join('')}
+  </div>` : ''}`;
+}
+function renderSpots() {
+  return `<div class="row"><h1 style="flex:1">スポット(${spots.length})</h1><button class="btn main" id="addSpot">新しいスポットを追加</button></div>
+  <div class="card">${spots.map(s => `<div class="item">
+    <div class="spotrow"><b>${esc(s.name)}</b><button class="btn" data-edit="${s.id}">編集</button></div>
+    <div class="row">
+      ${s.published ? '<span class="pill ok">公開中</span>' : '<span class="pill mute">非公開</span>'}
+      <span class="pill mute">${TYPES[s.type] || s.type}</span>
+      ${needsPos(s) ? '<span class="pill warn">位置:要登録</span>' : '<span class="pill ok">位置:登録済み</span>'}
+      <span class="meta">確認日 ${esc((s.data && s.data.checked) || '—')}</span>
+    </div></div>`).join('') || '<div class="empty">スポットがありません。</div>'}</div>`;
+}
+function renderReviews() {
+  return `<h1>レビュー(新しい順に50件)</h1>
+  <div class="card">${reviews.map(r => `<div class="item">
+    <div class="meta">${esc(spotName(r.spot_id))} ・ ${esc(names[r.user_id] || '利用者')} ・ ${fmtWhen(r.created_at)} ・ 滞在${r.stay_min}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>
+    <div class="body">${esc(r.body || '(コメントなし)')}</div>
+    <div class="acts">${r.status === 'published'
+      ? `<span class="pill ok">公開中</span><button class="btn danger" data-review="${r.id}" data-to="hidden">非表示にする</button>`
+      : `<span class="pill bad">非表示</span><button class="btn" data-review="${r.id}" data-to="published">再表示する</button>`}</div>
+  </div>`).join('') || '<div class="empty">まだレビューはありません。</div>'}
+  <div class="hint">個人を特定できる内容、お店や他の利用者への攻撃、勉強と関係のない宣伝は非表示にしてください。</div></div>`;
+}
+
+// ---------- スポットの編集 ----------
+let editing = null; // { spot, isNew, request, lat, lng, posTouched }
+function opt(v, label, cur) { return `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(label)}</option>`; }
+function openEditor(spot, request, focus) {
+  const isNew = !spot;
+  const d = Object.assign({}, spot ? spot.data : {});
+  const s = spot || { id: 's' + Date.now().toString(36), name: request ? '' : '', type: 'cafe', lat: CENTER.lat, lng: CENTER.lng, place_id: null, published: true };
+  editing = { spot: s, isNew, request: request || null, lat: s.lat, lng: s.lng, posTouched: false, data: d };
+  const limitVal = d.limitUnknown ? 'unknown' : d.limit == null ? '' : d.limit;
+  const wifiVal = d.wifi == null ? '' : d.wifi ? 'yes' : 'no';
+  const links = (d.links || []).map(l => l.join('|')).join('\n');
+  sheetRoot.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edTitle">
+    <div class="bar"><div class="wrap"><h2 id="edTitle">${isNew ? '新しいスポット' : esc(s.name)}</h2>
+      <button class="btn" id="edCancel">閉じる</button><button class="btn main" id="edSave">保存</button></div></div>
+    <form class="wrap grid" id="edForm" style="padding-top:16px">
+      ${request ? `<div class="req"><b>修正提案:${esc(request.field)}</b><span class="body">${esc(request.body)}</span><span class="meta">確かめ方:${esc(request.source || '記載なし')} ・ ${esc(names[request.user_id] || '利用者')}</span><span class="hint">保存すると、この提案は「反映済み」になります。</span></div>` : ''}
+      <fieldset id="fs-basic"><legend>基本</legend>
+        <label class="f"><span>名前</span><input type="text" id="e-name" value="${esc(s.name)}" maxlength="60" required></label>
+        <div class="two">
+          <label class="f"><span>種類</span><select id="e-type">${Object.keys(TYPES).map(k => opt(k, TYPES[k], s.type)).join('')}</select></label>
+          <label class="f"><span>情報の出どころ</span><select id="e-src">${SRC.map(x => opt(x, x, d.srcLabel || 'Webの公開情報')).join('')}</select></label>
+        </div>
+        <label class="f"><span>場所の説明(住所や「〇〇施設 1階」など)</span><input type="text" id="e-address" value="${esc(d.address || '')}" maxlength="80"></label>
+        <label class="check"><input type="checkbox" id="e-published" ${s.published ? 'checked' : ''}>利用者の画面に公開する(閉店したときはチェックを外す)</label>
+      </fieldset>
+      <fieldset id="fs-pos"><legend>位置</legend>
+        <div class="posmap" id="posMap"><div class="empty" style="padding:16px">地図を読み込んでいます…</div></div>
+        <div class="row"><span class="mono" id="posText">${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</span>
+          ${d.posSource === 'admin' ? '<span class="pill ok">登録済み</span>' : '<span class="pill warn">要登録</span>'}</div>
+        <label class="check"><input type="checkbox" id="e-posok" ${d.posSource === 'admin' ? 'checked' : ''}>ピンの位置が建物の入口付近と合っていることを確認した</label>
+        <div class="hint">地図をドラッグしてピンを動かし、確認できたらチェックを入れて保存してください。</div>
+      </fieldset>
+      <fieldset id="fs-study"><legend>勉強のルール</legend>
+        <label class="f"><span>勉強の受け入れ</span><select id="e-study">${Object.keys(STUDY).map(k => opt(k, STUDY[k], d.study || 'unknown')).join('')}</select></label>
+        <label class="f"><span>説明(利用者に表示されます)</span><textarea id="e-rule" rows="3" maxlength="200">${esc(d.rule || '')}</textarea></label>
+        <div class="two">
+          <label class="f"><span>滞在の上限</span><select id="e-limit">${opt('', '記載なし', limitVal)}${opt('unknown', '未確認', limitVal)}${[60, 90, 120, 150, 180, 240].map(m => opt(m, m + '分', limitVal)).join('')}</select></label>
+          <label class="f"><span>追加注文のお願い</span><select id="e-order">${opt('', 'なし', d.orderEvery == null ? '' : d.orderEvery)}${[60, 90, 120].map(m => opt(m, m + '分ごとに1オーダー', d.orderEvery)).join('')}</select></label>
+        </div>
+        <div class="two">
+          <label class="f"><span>利用を控える時間(開始・時)</span><input type="number" id="e-avoidFrom" min="0" max="23" value="${d.avoidFrom == null ? '' : d.avoidFrom}" placeholder="例:12"></label>
+          <label class="f"><span>利用を控える時間(終了・時)</span><input type="number" id="e-avoidTo" min="1" max="24" value="${d.avoidTo == null ? '' : d.avoidTo}" placeholder="例:13"></label>
+        </div>
+        <label class="f"><span>製作者のひとこと(任意)</span><input type="text" id="e-memo" value="${esc(d.memo || '')}" maxlength="80"></label>
+      </fieldset>
+      <fieldset id="fs-seats"><legend>設備と席</legend>
+        <div class="three">
+          <label class="f"><span>電源</span><select id="e-power">${Object.keys(POWER).map(k => opt(k, POWER[k], d.power || 'unknown')).join('')}</select></label>
+          <label class="f"><span>電源のある席数(任意)</span><input type="number" id="e-seatsPower" min="0" value="${d.seatsPower == null ? '' : d.seatsPower}"></label>
+          <label class="f"><span>Wi-Fi</span><select id="e-wifi">${opt('', '未確認', wifiVal)}${opt('yes', 'あり', wifiVal)}${opt('no', 'なし', wifiVal)}</select></label>
+        </div>
+        <div class="three">
+          <label class="f"><span>勉強できる席数</span><input type="number" id="e-seats" min="0" value="${d.seatsStudy == null ? '' : d.seatsStudy}"></label>
+          <label class="check" style="align-self:end"><input type="checkbox" id="e-seatsApprox" ${d.seatsApprox ? 'checked' : ''}>「約」を付ける</label>
+          <label class="f"><span>机の広さ</span><select id="e-desk">${opt('', '未確認', d.desk || '')}${Object.keys(DESK).map(k => opt(k, DESK[k], d.desk || '')).join('')}</select></label>
+        </div>
+        <label class="f"><span>席の配置</span><input type="text" id="e-seatNote" value="${esc(d.seatNote || '')}" maxlength="80" placeholder="例:窓側カウンター約10席、テーブル約50席"></label>
+      </fieldset>
+      <fieldset id="fs-hours"><legend>営業時間</legend>
+        <div class="two">
+          <label class="f"><span>平日 開始</span><input type="time" id="e-wkO" value="${toTime(d.wk && d.wk[0])}"></label>
+          <label class="f"><span>平日 終了</span><input type="time" id="e-wkC" value="${toTime(d.wk && d.wk[1])}"></label>
+        </div>
+        <div class="two">
+          <label class="f"><span>土日 開始</span><input type="time" id="e-weO" value="${toTime(d.we && d.we[0])}"></label>
+          <label class="f"><span>土日 終了</span><input type="time" id="e-weC" value="${toTime(d.we && d.we[1])}"></label>
+        </div>
+        <div class="two">
+          <label class="check"><input type="checkbox" id="e-weekendClosed" ${d.weekendClosed ? 'checked' : ''}>土日は休み</label>
+          <label class="f"><span>定休日</span><select id="e-closed">${opt('', 'なし', d.closed == null ? '' : d.closed)}${DAYS.map((x, i) => opt(i, x + '曜', d.closed)).join('')}</select></label>
+        </div>
+        <label class="f"><span>営業時間の補足</span><input type="text" id="e-hoursNote" value="${esc(d.hoursNote || '')}" maxlength="120" placeholder="例:祝日・年末年始は休み"></label>
+      </fieldset>
+      <fieldset id="fs-price"><legend>料金と利用条件</legend>
+        <label class="f"><span>料金の目安</span><input type="text" id="e-price" value="${esc(d.price || '')}" maxlength="80"></label>
+        <label class="check"><input type="checkbox" id="e-free" ${d.free ? 'checked' : ''}>無料で使える(「無料」で絞り込めるようになります)</label>
+        <label class="f"><span>利用条件</span><textarea id="e-cond" rows="2" maxlength="200">${esc(d.cond || '')}</textarea></label>
+        <label class="f"><span>学生向け特典(任意)</span><input type="text" id="e-coupon" value="${esc(d.coupon || '')}" maxlength="60"></label>
+      </fieldset>
+      <fieldset><legend>リンク</legend>
+        <label class="f"><span>地図検索に使う名前</span><input type="text" id="e-mapQuery" value="${esc(d.mapQuery || s.name)}" maxlength="80"></label>
+        <label class="f"><span>表示するリンク(1行に「名前|URL」)</span><textarea id="e-links" rows="3">${esc(links)}</textarea></label>
+      </fieldset>
+      <button class="btn main" type="submit">保存</button>
+      <div class="hint">保存すると「情報の確認日」が今日(${todayJST()})になり、利用者の画面にすぐ反映されます。</div>
+    </form></div>`;
+  document.body.style.overflow = 'hidden';
+  initPosMap();
+  const target = { pos: 'fs-pos', study: 'fs-study', limit: 'fs-study', power: 'fs-seats', seats: 'fs-seats', hours: 'fs-hours', price: 'fs-price', basic: 'fs-basic' }[focus];
+  if (target) { const el = document.getElementById(target); if (el && el.scrollIntoView) setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); }
+}
+function closeEditor() { editing = null; sheetRoot.innerHTML = ''; document.body.style.overflow = ''; }
+
+// 位置登録用の地図(ピンをドラッグで動かす)
+let mapsReady = null;
+function loadMaps() {
+  if (mapsReady) return mapsReady;
+  mapsReady = new Promise((ok, ng) => {
+    if (window.google && window.google.maps) { ok(); return; }
+    window.__gmReady = () => ok();
+    window.gm_authFailure = () => ng(new Error('auth'));
+    const sc = document.createElement('script');
+    sc.async = true; sc.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=__gmReady&loading=async&language=ja&region=JP`;
+    sc.onerror = () => ng(new Error('load'));
+    document.head.appendChild(sc);
+  });
+  return mapsReady;
+}
+function initPosMap() {
+  const box = document.getElementById('posMap');
+  loadMaps().then(() => {
+    if (!editing || !document.getElementById('posMap')) return;
+    box.innerHTML = '';
+    const p = { lat: editing.lat, lng: editing.lng };
+    const map = new google.maps.Map(box, { center: p, zoom: 18, gestureHandling: 'greedy', clickableIcons: false, mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
+    const mk = new google.maps.Marker({ position: p, map, draggable: true, title: 'ドラッグして位置を合わせる' });
+    const set = ll => {
+      editing.lat = ll.lat(); editing.lng = ll.lng(); editing.posTouched = true;
+      const t = document.getElementById('posText'); if (t) t.textContent = `${editing.lat.toFixed(6)}, ${editing.lng.toFixed(6)}`;
+    };
+    mk.addListener('dragend', () => set(mk.getPosition()));
+    map.addListener('click', e => { mk.setPosition(e.latLng); set(e.latLng); });
+  }).catch(() => {
+    box.innerHTML = `<div class="grid" style="padding:12px"><div class="hint">地図を読み込めませんでした。緯度・経度を直接入力できます。</div>
+      <div class="two"><label class="f"><span>緯度</span><input type="number" step="0.000001" id="e-lat" value="${editing.lat}"></label>
+      <label class="f"><span>経度</span><input type="number" step="0.000001" id="e-lng" value="${editing.lng}"></label></div></div>`;
+  });
+}
+function collect() {
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const c = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+  const name = v('e-name');
+  if (!name) return { error: '名前を入力してください' };
+  const wkO = fromTime(v('e-wkO')), wkC = fromTime(v('e-wkC')), weO = fromTime(v('e-weO')), weC = fromTime(v('e-weC'));
+  if (wkO == null || wkC == null || wkC <= wkO) return { error: '平日の営業時間を、開始より後の終了時刻で入力してください' };
+  const weekendClosed = c('e-weekendClosed');
+  if (!weekendClosed && (weO == null || weC == null || weC <= weO)) return { error: '土日の営業時間を入力するか、「土日は休み」にチェックしてください' };
+  const af = numOrNull(v('e-avoidFrom')), at = numOrNull(v('e-avoidTo'));
+  if ((af == null) !== (at == null) || (af != null && at <= af)) return { error: '利用を控える時間は、開始と終了の両方を入れてください(終了は開始より後)' };
+  const latEl = document.getElementById('e-lat'), lngEl = document.getElementById('e-lng');
+  if (latEl && lngEl) { const la = Number(latEl.value), ln = Number(lngEl.value); if (la !== editing.lat || ln !== editing.lng) { editing.lat = la; editing.lng = ln; editing.posTouched = true; } }
+  if (!(editing.lat > 20 && editing.lat < 50 && editing.lng > 120 && editing.lng < 155)) return { error: '位置が正しくありません。地図でピンを合わせてください' };
+  const limitSel = v('e-limit');
+  const links = v('e-links').split('\n').map(l => l.split('|').map(x => x.trim())).filter(x => x.length === 2 && /^https?:\/\//.test(x[1]));
+  const wifiSel = v('e-wifi');
+  const data = Object.assign({}, editing.data, {
+    study: v('e-study'), rule: v('e-rule'), srcLabel: v('e-src'), address: v('e-address'),
+    limit: limitSel === '' || limitSel === 'unknown' ? null : Number(limitSel), limitUnknown: limitSel === 'unknown',
+    orderEvery: numOrNull(v('e-order')), avoidFrom: af, avoidTo: at, memo: v('e-memo'),
+    power: v('e-power'), seatsPower: numOrNull(v('e-seatsPower')), wifi: wifiSel === '' ? null : wifiSel === 'yes',
+    seatsStudy: numOrNull(v('e-seats')), seatsApprox: c('e-seatsApprox'), desk: v('e-desk') || null, seatNote: v('e-seatNote'),
+    wk: [wkO, wkC], we: weekendClosed ? [0, 0] : [weO, weC], weekendClosed, closed: numOrNull(v('e-closed')), hoursNote: v('e-hoursNote'),
+    price: v('e-price'), free: c('e-free'), cond: v('e-cond'), coupon: v('e-coupon'),
+    mapQuery: v('e-mapQuery') || name, links, checked: todayJST()
+  });
+  if (data.seatsPower != null && data.seatsStudy != null && data.seatsPower > data.seatsStudy) return { error: '電源のある席数は、勉強できる席数以下にしてください' };
+  if (c('e-posok')) { data.posSource = 'admin'; if (editing.posTouched || !data.posCheckedAt) data.posCheckedAt = todayJST(); }
+  else if (editing.posTouched) { delete data.posSource; }
+  return { row: { name, type: v('e-type'), lat: editing.lat, lng: editing.lng, published: c('e-published'), data, updated_at: new Date().toISOString() } };
+}
+async function saveEditor() {
+  const { error: msg, row } = collect();
+  if (msg) { toast(msg); return; }
+  const btns = [...document.querySelectorAll('#edSave, #edForm button[type="submit"]')];
+  btns.forEach(b => { b.disabled = true; });
+  const q = editing.isNew ? sb.from('spots').insert(Object.assign({ id: editing.spot.id, place_id: null }, row)) : sb.from('spots').update(row).eq('id', editing.spot.id);
+  const { error } = await q;
+  if (error) { btns.forEach(b => { b.disabled = false; }); toast('保存できませんでした。運営者としてログインしているか確認してください'); return; }
+  if (editing.request) {
+    const upd = { status: 'applied', handled_at: new Date().toISOString() };
+    if (!editing.request.spot_id && editing.isNew) upd.spot_id = editing.spot.id;
+    await sb.from('edit_requests').update(upd).eq('id', editing.request.id);
+  }
+  const wasNew = editing.isNew;
+  closeEditor(); await loadAll(); render();
+  toast(wasNew ? '追加しました。利用者の画面に反映されています' : '保存しました。利用者の画面に反映されています');
+}
+
+// ---------- 操作 ----------
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  tab = b.dataset.tab; render(); window.scrollTo(0, 0);
+});
+document.getElementById('logoutBtn').addEventListener('click', async () => { await sb.auth.signOut(); session = null; renderLogin(); });
+main.addEventListener('submit', async e => {
+  if (e.target.id !== 'loginForm') return;
+  e.preventDefault();
+  const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'ログインしています…';
+  const { data, error } = await sb.auth.signInWithPassword({ email: document.getElementById('email').value.trim(), password: document.getElementById('password').value });
+  if (error) { btn.disabled = false; btn.textContent = 'ログイン'; toast('メールアドレスかパスワードが違います'); return; }
+  session = data.session; await afterLogin();
+});
+main.addEventListener('click', async e => {
+  const t = e.target;
+  const ap = t.closest('[data-apply]');
+  if (ap) { const r = requests.find(x => String(x.id) === ap.dataset.apply); openEditor(spots.find(s => s.id === r.spot_id), r, FIELD_HINT[r.field]); return; }
+  const nf = t.closest('[data-newfrom]');
+  if (nf) { openEditor(null, requests.find(x => String(x.id) === nf.dataset.newfrom), 'basic'); return; }
+  const mk = t.closest('[data-mark]');
+  if (mk) {
+    mk.disabled = true;
+    const { error } = await sb.from('edit_requests').update({ status: mk.dataset.status, handled_at: new Date().toISOString() }).eq('id', mk.dataset.mark);
+    if (error) { mk.disabled = false; toast('更新できませんでした'); return; }
+    await loadAll(); render(); toast(mk.dataset.status === 'rejected' ? '却下しました' : '反映済みにしました'); return;
+  }
+  const ed = t.closest('[data-edit]');
+  if (ed) { openEditor(spots.find(s => s.id === ed.dataset.edit), null, ed.dataset.focus); return; }
+  if (t.closest('#addSpot')) { openEditor(null, null, 'basic'); return; }
+  const rv = t.closest('[data-review]');
+  if (rv) {
+    rv.disabled = true;
+    const { error } = await sb.from('reviews').update({ status: rv.dataset.to }).eq('id', rv.dataset.review);
+    if (error) { rv.disabled = false; toast('更新できませんでした'); return; }
+    await loadAll(); render(); toast(rv.dataset.to === 'hidden' ? '非表示にしました' : '再表示しました'); return;
+  }
+});
+sheetRoot.addEventListener('click', e => {
+  if (e.target.closest('#edCancel')) { closeEditor(); return; }
+  if (e.target.closest('#edSave')) { saveEditor(); return; }
+});
+sheetRoot.addEventListener('submit', e => { if (e.target.id === 'edForm') { e.preventDefault(); saveEditor(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && editing) closeEditor(); });
+
+start();
+})();
+</script>
+</body>
+</html>
