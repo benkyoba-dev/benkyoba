@@ -83,7 +83,12 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
 .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .req { border-radius: 10px; padding: 10px 12px; background: var(--warn-soft); font-size: 14px; display: grid; gap: 4px; }
-.posmap { height: 280px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--grid); }
+.posmap { position: relative; height: 280px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--grid); }
+.posmap .gm { position: absolute; inset: 0; }
+.posmsg { border-radius: 10px; padding: 10px 12px; background: var(--warn-soft); font-size: 13.5px; }
+.pastebox { display: flex; gap: 8px; }
+.pastebox input { flex: 1; }
+a.btn { text-decoration: none; text-align: center; color: inherit; display: inline-flex; align-items: center; justify-content: center; }
 .mono { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
 .sheet { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .sheet .bar { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -289,10 +294,17 @@ function openEditor(spot, request, focus) {
       </fieldset>
       <fieldset id="fs-pos"><legend>位置</legend>
         <div class="posmap" id="posMap"><div class="empty" style="padding:16px">地図を読み込んでいます…</div></div>
+        <div class="posmsg" id="posMsg" hidden></div>
         <div class="row"><span class="mono" id="posText">${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</span>
           ${d.posSource === 'admin' ? '<span class="pill ok">登録済み</span>' : '<span class="pill warn">要登録</span>'}</div>
+        <div class="two">
+          <button type="button" class="btn" id="posHere">今いる場所で登録</button>
+          <a class="btn" id="posOpen" href="${gmapsUrl(s.lat, s.lng)}" target="_blank" rel="noopener">この位置をGoogleマップで開く</a>
+        </div>
+        <label class="f"><span>緯度経度を貼り付けて登録(スマホのGoogleマップで場所を長押しすると出る数字)</span>
+          <span class="pastebox"><input type="text" id="posPaste" inputmode="decimal" placeholder="例:36.548807, 136.710848" autocomplete="off"><button type="button" class="btn" id="posApply">反映</button></span></label>
         <label class="check"><input type="checkbox" id="e-posok" ${d.posSource === 'admin' ? 'checked' : ''}>ピンの位置が建物の入口付近と合っていることを確認した</label>
-        <div class="hint">地図をドラッグしてピンを動かし、確認できたらチェックを入れて保存してください。</div>
+        <div class="hint">地図ではピンをドラッグするか、地図をタップして位置を合わせます。現地にいるときは「今いる場所で登録」が一番確実です。確認できたらチェックを入れて保存してください。</div>
       </fieldset>
       <fieldset id="fs-study"><legend>勉強のルール</legend>
         <label class="f"><span>勉強の受け入れ</span><select id="e-study">${Object.keys(STUDY).map(k => opt(k, STUDY[k], d.study || 'unknown')).join('')}</select></label>
@@ -353,16 +365,18 @@ function openEditor(spot, request, focus) {
   const target = { pos: 'fs-pos', study: 'fs-study', limit: 'fs-study', power: 'fs-seats', seats: 'fs-seats', hours: 'fs-hours', price: 'fs-price', basic: 'fs-basic' }[focus];
   if (target) { const el = document.getElementById(target); if (el && el.scrollIntoView) setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); }
 }
-function closeEditor() { editing = null; sheetRoot.innerHTML = ''; document.body.style.overflow = ''; }
+function closeEditor() { editing = null; clearTimeout(posTimer); if (posMapEl && posMapEl.parentNode) posMapEl.parentNode.removeChild(posMapEl); sheetRoot.innerHTML = ''; document.body.style.overflow = ''; }
 
-// 位置登録用の地図(ピンをドラッグで動かす)
-let mapsReady = null;
+// 位置登録用の地図。利用者画面と同じく、地図は1つだけ作って使い回し、編集画面が開ききってから描き直す
+const gmapsUrl = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+let mapsReady = null, mapsAuthFailed = false;
+let posMapObj = null, posMarker = null, posMapEl = null, posDrawnOnce = false, posTimer = null;
 function loadMaps() {
   if (mapsReady) return mapsReady;
   mapsReady = new Promise((ok, ng) => {
-    if (window.google && window.google.maps) { ok(); return; }
+    if (window.google && window.google.maps && window.google.maps.Map) { ok(); return; }
     window.__gmReady = () => ok();
-    window.gm_authFailure = () => ng(new Error('auth'));
+    window.gm_authFailure = () => { mapsAuthFailed = true; ng(new Error('auth')); showPosMsg('Googleマップのキーの設定で、このページでの地図の表示が許可されていません。Google Cloudの「認証情報」で、ウェブサイトの制限に https://benkyoba-dev.github.io/benkyoba/* が入っているか確認してください。それまでは「今いる場所で登録」か緯度経度の貼り付けで登録できます。'); };
     const sc = document.createElement('script');
     sc.async = true; sc.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=__gmReady&loading=async&language=ja&region=JP`;
     sc.onerror = () => ng(new Error('load'));
@@ -370,25 +384,66 @@ function loadMaps() {
   });
   return mapsReady;
 }
+function showPosMsg(text) { const m = document.getElementById('posMsg'); if (m) { m.textContent = text; m.hidden = !text; } }
+function setPos(lat, lng, from) {
+  if (!editing) return;
+  editing.lat = lat; editing.lng = lng; editing.posTouched = true;
+  const t = document.getElementById('posText'); if (t) t.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  const o = document.getElementById('posOpen'); if (o) o.href = gmapsUrl(lat, lng);
+  if (posMarker && from !== 'marker') posMarker.setPosition({ lat, lng });
+  if (posMapObj && from !== 'marker' && from !== 'map') posMapObj.panTo({ lat, lng });
+}
 function initPosMap() {
   const box = document.getElementById('posMap');
+  if (mapsAuthFailed) { box.innerHTML = '<div class="empty" style="padding:16px">地図は表示できません。下の方法で位置を登録してください。</div>'; return; }
   loadMaps().then(() => {
-    if (!editing || !document.getElementById('posMap')) return;
-    box.innerHTML = '';
-    const p = { lat: editing.lat, lng: editing.lng };
-    const map = new google.maps.Map(box, { center: p, zoom: 18, gestureHandling: 'greedy', clickableIcons: false, mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
-    const mk = new google.maps.Marker({ position: p, map, draggable: true, title: 'ドラッグして位置を合わせる' });
-    const set = ll => {
-      editing.lat = ll.lat(); editing.lng = ll.lng(); editing.posTouched = true;
-      const t = document.getElementById('posText'); if (t) t.textContent = `${editing.lat.toFixed(6)}, ${editing.lng.toFixed(6)}`;
-    };
-    mk.addListener('dragend', () => set(mk.getPosition()));
-    map.addListener('click', e => { mk.setPosition(e.latLng); set(e.latLng); });
+    if (!editing || document.getElementById('posMap') !== box) return;
+    if (!posMapEl) {
+      posMapEl = document.createElement('div'); posMapEl.className = 'gm';
+      posMapObj = new google.maps.Map(posMapEl, { center: { lat: editing.lat, lng: editing.lng }, zoom: 18, gestureHandling: 'greedy', clickableIcons: false, mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
+      posMarker = new google.maps.Marker({ position: { lat: editing.lat, lng: editing.lng }, map: posMapObj, draggable: true, title: 'ドラッグして位置を合わせる' });
+      posMarker.addListener('dragend', () => { const p = posMarker.getPosition(); setPos(p.lat(), p.lng(), 'marker'); });
+      posMapObj.addListener('click', e => { posMarker.setPosition(e.latLng); setPos(e.latLng.lat(), e.latLng.lng(), 'map'); });
+      const drawn = () => { posDrawnOnce = true; clearTimeout(posTimer); showPosMsg(''); };
+      posMapObj.addListener('tilesloaded', drawn);
+      posMapObj.addListener('idle', drawn);
+    }
+    box.innerHTML = ''; box.appendChild(posMapEl);
+    // 編集画面が開ききって枠の大きさが決まってから、位置と表示を合わせ直す
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!editing) return;
+      const p = { lat: editing.lat, lng: editing.lng };
+      if (google.maps.event && google.maps.event.trigger) google.maps.event.trigger(posMapObj, 'resize');
+      posMapObj.setCenter(p); posMapObj.setZoom(18); posMarker.setPosition(p);
+    }));
+    clearTimeout(posTimer);
+    if (!posDrawnOnce) posTimer = setTimeout(() => {
+      if (editing && !posDrawnOnce) showPosMsg('地図を表示できませんでした。「今いる場所で登録」か、緯度経度の貼り付けで登録できます。');
+    }, 8000);
   }).catch(() => {
-    box.innerHTML = `<div class="grid" style="padding:12px"><div class="hint">地図を読み込めませんでした。緯度・経度を直接入力できます。</div>
-      <div class="two"><label class="f"><span>緯度</span><input type="number" step="0.000001" id="e-lat" value="${editing.lat}"></label>
-      <label class="f"><span>経度</span><input type="number" step="0.000001" id="e-lng" value="${editing.lng}"></label></div></div>`;
+    box.innerHTML = '<div class="empty" style="padding:16px">地図を読み込めませんでした。下の「今いる場所で登録」か、緯度経度の貼り付けで登録できます。</div>';
   });
+}
+function useHere() {
+  if (!navigator.geolocation) { toast('この端末では現在地を取得できません。緯度経度の貼り付けを使ってください'); return; }
+  const b = document.getElementById('posHere'); if (b) { b.disabled = true; b.textContent = '現在地を確認しています…'; }
+  navigator.geolocation.getCurrentPosition(p => {
+    if (b) { b.disabled = false; b.textContent = '今いる場所で登録'; }
+    setPos(p.coords.latitude, p.coords.longitude, 'here');
+    const acc = Math.round(p.coords.accuracy || 0);
+    toast(acc > 50 ? `現在地を入れました(誤差 約${acc}m)。誤差が大きいので、建物の外で少し待ってからもう一度押すと正確になります` : `現在地を入れました(誤差 約${acc}m)`);
+  }, err => {
+    if (b) { b.disabled = false; b.textContent = '今いる場所で登録'; }
+    toast(err && err.code === 1 ? '位置情報が許可されていません。ブラウザの設定で許可するか、緯度経度の貼り付けを使ってください' : '現在地を取得できませんでした。もう一度お試しください');
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
+function applyPaste() {
+  const raw = (document.getElementById('posPaste') || {}).value || '';
+  const m = raw.replace(/[，、]/g, ',').match(/(-?\d{1,3}\.\d+)\s*[,\s]\s*(-?\d{1,3}\.\d+)/);
+  if (!m) { toast('「36.548807, 136.710848」のような形で貼り付けてください'); return; }
+  const lat = Number(m[1]), lng = Number(m[2]);
+  if (!(lat > 20 && lat < 50 && lng > 120 && lng < 155)) { toast('日本国内の緯度経度ではないようです。順番(緯度, 経度)を確認してください'); return; }
+  setPos(lat, lng, 'paste'); toast('貼り付けた位置を入れました');
 }
 function collect() {
   const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -401,8 +456,6 @@ function collect() {
   if (!weekendClosed && (weO == null || weC == null || weC <= weO)) return { error: '土日の営業時間を入力するか、「土日は休み」にチェックしてください' };
   const af = numOrNull(v('e-avoidFrom')), at = numOrNull(v('e-avoidTo'));
   if ((af == null) !== (at == null) || (af != null && at <= af)) return { error: '利用を控える時間は、開始と終了の両方を入れてください(終了は開始より後)' };
-  const latEl = document.getElementById('e-lat'), lngEl = document.getElementById('e-lng');
-  if (latEl && lngEl) { const la = Number(latEl.value), ln = Number(lngEl.value); if (la !== editing.lat || ln !== editing.lng) { editing.lat = la; editing.lng = ln; editing.posTouched = true; } }
   if (!(editing.lat > 20 && editing.lat < 50 && editing.lng > 120 && editing.lng < 155)) return { error: '位置が正しくありません。地図でピンを合わせてください' };
   const limitSel = v('e-limit');
   const links = v('e-links').split('\n').map(l => l.split('|').map(x => x.trim())).filter(x => x.length === 2 && /^https?:\/\//.test(x[1]));
@@ -481,7 +534,10 @@ main.addEventListener('click', async e => {
 sheetRoot.addEventListener('click', e => {
   if (e.target.closest('#edCancel')) { closeEditor(); return; }
   if (e.target.closest('#edSave')) { saveEditor(); return; }
+  if (e.target.closest('#posHere')) { useHere(); return; }
+  if (e.target.closest('#posApply')) { applyPaste(); return; }
 });
+sheetRoot.addEventListener('keydown', e => { if (e.target.id === 'posPaste' && e.key === 'Enter') { e.preventDefault(); applyPaste(); } });
 sheetRoot.addEventListener('submit', e => { if (e.target.id === 'edForm') { e.preventDefault(); saveEditor(); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && editing) closeEditor(); });
 
