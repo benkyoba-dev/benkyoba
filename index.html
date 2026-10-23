@@ -269,6 +269,29 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 .iw { font-size: 13px; font-weight: 700; color: #1c2332; }
 @media (max-width: 380px) { .gmapbox { height: 260px; } }
 .offline { margin-top: 12px; border-radius: 8px; padding: 8px 12px; font-size: 13px; background: var(--warn-soft); color: var(--ink); }
+.card h3 { grid-column: 1 / -1; }
+.cline { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: 13px; min-width: 0; }
+.cline .hrs { font-weight: 700; min-width: 0; }
+.cline .hrs.off { color: var(--muted); font-weight: 500; }
+.cline .walk { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.meter { flex: 1 1 auto; max-width: 160px; height: 8px; border-radius: 999px; background: var(--grid); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 999px; }
+.cbar b { font-family: var(--f-mono); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cbar .lbl { color: var(--muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbar.none { color: var(--muted); font-size: 12.5px; }
+.waitbadge { font-size: 11.5px; font-weight: 700; color: var(--bad); background: var(--bad-soft); border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+.card .alert, .summary .alert { grid-column: 1 / -1; font-size: 12.5px; font-weight: 700; color: var(--bad); }
+.summary { display: grid; gap: 8px; padding-block: 14px 6px; }
+.summary .big { font-size: 16px; font-weight: 700; }
+.summary .big.off { color: var(--muted); }
+.summary .cbar .meter { max-width: none; }
+.postbox { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.pctrow { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+.pctrow output { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.postbox input[type="range"] { width: 100%; accent-color: var(--accent); }
+.scale { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.postbox .btn { width: 100%; }
 .more summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 700; padding-block: 2px; }
 .more[open] summary { margin-bottom: 8px; }
 .perks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -446,18 +469,51 @@ function hoursText(s) {
 }
 function crowdNow(s) {
   const now = Date.now();
-  if (typeof sb !== 'undefined' && sb) { const c = crowdShared[s.id]; return c && now - c.at < 2 * 3600e3 ? { level: c.level, src: `${relTime(c.at)}の投稿` } : null; }
+  if (typeof sb !== 'undefined' && sb) { const c = crowdShared[s.id]; return c && now - c.at < 2 * 3600e3 ? { level: pctLevel(c.pct, c.waiting), pct: c.pct, waiting: c.waiting, n: c.n, src: `${c.n}件の投稿から・最新は${relTime(c.at)}` } : null; }
   const mine = store.posts.filter(p => p.spot === s.id && now - p.at < 2 * 3600e3).sort((a, b) => b.at - a.at)[0];
-  if (mine) return { level: mine.level, src: `${Math.max(1, Math.round((now - mine.at) / 60000))}分前の投稿` };
+  if (mine) { const pct = mine.pct != null ? mine.pct : [20, 55, 85][mine.level]; return { level: pctLevel(pct, mine.waiting), pct, waiting: !!mine.waiting, n: 1, src: `${Math.max(1, Math.round((now - mine.at) / 60000))}分前の投稿` }; }
   return null;
 }
 const crowdPill = s => {
   if (!isOpen(s)) return '<span class="crowd closed">営業時間外</span>';
   const c = crowdNow(s);
   if (!c) return '<span class="crowd closed">混雑情報なし</span>';
-  return `<span class="crowd l${c.level}">${CROWD[c.level]}</span>`;
+  return `<span class="crowd l${c.level}">約${c.pct}%${c.waiting ? '・待ちあり' : ''}</span>`;
 };
 const crowdColor = lv => ['var(--good)', 'var(--warn)', 'var(--bad)'][lv];
+// 混雑は0〜100%。見たままの様子の言葉と、地図の色(緑・黄・赤)の段階
+const pctLabel = p => p <= 30 ? '空席が多い' : p <= 60 ? '半分くらい埋まっている' : p <= 80 ? '空席がわずか' : 'ほぼ満席';
+const pctLevel = (p, w) => (w || p >= 80) ? 2 : p >= 50 ? 1 : 0;
+// 「営業中・22:00まで」「時間外・明日 8:45から」
+function nextOpenText(s, now = new Date()) {
+  const f = h => `${Math.floor(h)}:${pad(Math.round((h % 1) * 60))}`;
+  const isWe = d => d === 0 || d === 6;
+  if (isOpen(s, now)) return { open: true, text: `営業中・${f((isWe(now.getDay()) ? s.we : s.wk)[1])}まで` };
+  const h = now.getHours() + now.getMinutes() / 60;
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    const dow = d.getDay();
+    if (s.closed === dow || (isWe(dow) && s.weekendClosed)) continue;
+    const [o, c] = isWe(dow) ? s.we : s.wk;
+    if (!(c > o)) continue;
+    if (i === 0) { if (h < o) return { open: false, text: `時間外・今日 ${f(o)}から` }; continue; }
+    return { open: false, text: `時間外・${i === 1 ? '明日' : ['日', '月', '火', '水', '木', '金', '土'][dow] + '曜'} ${f(o)}から` };
+  }
+  return { open: false, text: '営業時間外' };
+}
+const walkShort = s => distM(basePt(), s) < 120 ? 'すぐ近く' : `徒歩${walkMin(s)}分`;
+function crowdBar(s) {
+  if (!isOpen(s)) return '';
+  const c = crowdNow(s);
+  if (!c) return '<div class="cbar none">混雑情報なし</div>';
+  return `<div class="cbar"><span class="meter" aria-hidden="true"><i style="width:${Math.max(4, c.pct)}%;background:${crowdColor(c.level)}"></i></span><b>約${c.pct}%</b>${c.waiting ? '<span class="waitbadge">待ちあり</span>' : ''}<span class="lbl">${pctLabel(c.pct)}</span></div>`;
+}
+// 行ってから困ることだけを、該当するときに1行で出す
+function alertLine(s) {
+  if (s.study === 'ng') return '<div class="alert">勉強はできないお店です</div>';
+  if (avoidNow(s)) return `<div class="alert">今は利用を控える時間です(${s.avoidFrom}〜${s.avoidTo}時)</div>`;
+  return '';
+}
 
 // ---------- state ----------
 const DEFAULT_FILTERS = { types: [], power: false, wifi: false, long: false, free: false, open: false, quiet: false, wide: false, studyOnly: true, within: 0, sort: 'near' };
@@ -511,7 +567,7 @@ function filtered() {
   const by = {
     near: (a, b) => walkMin(a) - walkMin(b),
     quiet: (a, b) => (statsOf(b).quiet || 0) - (statsOf(a).quiet || 0),
-    empty: (a, b) => { const v = x => !isOpen(x) ? 9 : crowdNow(x) ? crowdNow(x).level : 5; return v(a) - v(b); },
+    empty: (a, b) => { const v = x => { if (!isOpen(x)) return 999; const c = crowdNow(x); return c ? c.pct + (c.waiting ? 50 : 0) : 65; }; return v(a) - v(b); },
     stay: (a, b) => (statsOf(b).stay || 0) - (statsOf(a).stay || 0),
     seats: (a, b) => (b.seatsStudy || 0) - (a.seatsStudy || 0)
   };
@@ -585,24 +641,13 @@ function syncMap() {
 
 function cardsHTML(list) {
   return list.map(s => {
-    const st = STUDY[s.study];
-    const tags = [
-      `<span class="tag ${st.tag}">${st.label}</span>`,
-      welcomeNow(s) ? '<span class="tag hl">今は勉強歓迎の時間</span>' : '',
-      avoidNow(s) ? '<span class="tag ng">今は混雑時間(利用を控える)</span>' : '',
-      s.avoidFrom != null && !avoidNow(s) ? `<span class="tag">${s.avoidFrom}〜${s.avoidTo}時は控える</span>` : '',
-      s.coupon ? '<span class="tag">学生向け特典あり</span>' : '',
-      s.limitUnknown ? '<span class="tag">滞在時間 未確認</span>' : s.limit ? `<span class="tag">${s.limit}分まで</span>` : '<span class="tag">滞在上限の記載なし</span>',
-      s.power === 'all' || s.power === 'some' ? `<span class="tag">電源 ${POWER[s.power]}</span>` : '',
-      s.wifi ? '<span class="tag">Wi-Fi</span>' : '',
-      s.seatsStudy ? `<span class="tag">座席 ${s.seatsApprox ? '約' : ''}${s.seatsStudy.toLocaleString()}${s.desk ? '・机' + DESK_SHORT[s.desk] : ''}</span>` : '',
-      s.free ? '<span class="tag hl">無料</span>' : ''
-    ].join('');
+    const h = nextOpenText(s);
     return `<button class="card ${s.study === 'ng' ? 'ng' : ''} ${selected === s.id ? 'sel' : ''}" data-spot="${s.id}" id="card-${s.id}">
-      <h3>${hl(s.name)}</h3>${crowdPill(s)}
-      <div class="meta">${TYPES[s.type]} ・ ${walkText(s)} ・ ${esc(s.price)}</div>
-      ${matchNote(s)}
-      <div class="tags">${tags}</div></button>`;
+      <h3>${hl(s.name)}</h3>
+      <div class="cline"><span class="hrs ${h.open ? '' : 'off'}">${h.text}</span><span class="walk">${walkShort(s)}</span></div>
+      ${crowdBar(s)}
+      ${alertLine(s)}
+      ${matchNote(s)}</button>`;
   }).join('');
 }
 const emptyHTML = () => `<div class="empty">${query.trim() ? `「${esc(query.trim())}」に合うスポットがありません。言葉を短くするか、条件を1つ外してみてください。` : '条件に合うスポットがありません。条件を1つ外してみてください。'}</div>`;
@@ -636,7 +681,7 @@ function renderSearch() {
       <button type="button" class="areabtn" id="areaBtn" ${areaDirty ? '' : 'hidden'}>このエリアで探す</button>
       <button type="button" class="herebtn" data-here="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>現在地</button>
     </div>
-      <div class="legend"><span><i style="background:var(--good)"></i>空いている</span><span><i style="background:var(--warn)"></i>ふつう</span><span><i style="background:var(--bad)"></i>混んでいる</span><span><i style="background:var(--muted)"></i>情報なし・時間外</span><span><i style="background:var(--accent)"></i>${esc(baseName())}</span><span>ピンをタップで一覧の位置へ・距離は直線距離からの目安</span></div>
+      <div class="legend"><span><i style="background:var(--good)"></i>〜49%</span><span><i style="background:var(--warn)"></i>50〜79%</span><span><i style="background:var(--bad)"></i>80%〜・待ちあり</span><span><i style="background:var(--muted)"></i>情報なし・時間外</span><span><i style="background:var(--accent)"></i>${esc(baseName())}</span><span>ピンをタップで一覧の位置へ</span></div>
     </div>
     <div class="filters">
       <div class="chips" aria-label="種別">${Object.keys(TYPES).map(tchip).join('')}</div>
@@ -970,8 +1015,11 @@ function renderDetail(s) {
   const fav = store.favs.includes(s.id);
   const revs = sb ? (reviewsCache[s.id] || []).map(r => ({ who: r.who, stay: r.stay, quiet: r.quiet, power: r.power, text: r.text, ago: (r.mine ? 'あなた・' : '') + relTime(r.at) }))
     : store.reviews.filter(r => r.spot === s.id).map(r => ({ who: r.who, stay: r.stay, quiet: r.quiet, power: r.power, text: r.text, ago: 'あなたの投稿' }));
-  const open = isOpen(s);
+  const open = isOpen(s), h = nextOpenText(s);
   const order = s.orderEvery ? `${s.orderEvery}分ごとに1オーダー` : '—';
+  const wait = crowdWait(s.id);
+  const freeSeats = open && c && s.seatsStudy ? (c.waiting ? 0 : Math.max(0, Math.round(s.seatsStudy * (100 - c.pct) / 100))) : null;
+  const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&destination_place_id=' + s.placeId : ''}&travelmode=walking`;
   return `<div class="overlay" data-close="1"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dTitle">
     <div class="head wrap">
       <div style="flex:1;min-width:0"><h2 id="dTitle">${esc(s.name)}</h2><div class="sub">${TYPES[s.type]} ・ ${walkText(s)}(目安) ・ ${open ? '営業中' : '営業時間外'}</div></div>
@@ -979,28 +1027,57 @@ function renderDetail(s) {
       <button class="iconbtn" data-close="1" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="wrap">
+      <div class="summary">
+        <div class="big ${h.open ? '' : 'off'}">${h.text}</div>
+        ${open ? (c ? `${crowdBar(s)}<div class="hint">${c.src}${freeSeats !== null ? ` ・ 空いている勉強席の目安 約${freeSeats}席` : ''}</div>` : '<div class="cbar none">混雑情報なし(直近2時間の投稿はまだありません)</div>') : ''}
+        ${alertLine(s)}
+        <a class="btn ghost" href="${dirUrl}" target="_blank" rel="noopener">徒歩の道順を見る(Googleマップ)</a>
+      </div>
+      <div class="sec">
+        ${s.study === 'ng' ? '<div class="hint">このお店は勉強を受け付けていないため、勉強タイマーは使えません。</div>' : s.study === 'unknown' ? '<div class="hint">勉強してよいかが未確認のため、勉強タイマーは使えません。お店の掲示や店員さんに確認できたら、修正提案で教えてください。</div>' : `<button class="btn" id="startHere">ここで勉強を始める(タイマー)</button>`}
+      </div>
+      <div class="sec"><h4>混雑を投稿</h4>
+        <div class="ask">${open ? '今この場所にいますか?見たままの混み具合を教えてください' : '営業時間中に現地にいるとき、混雑の様子を投稿できます'}</div>
+        ${wait ? `<div class="waitnote">投稿ありがとうございました。この場所には ${hhmm(Date.now() + wait)} ごろからまた投稿できます(あと約${Math.ceil(wait / 60000)}分)</div>` : ''}
+        <div class="postbox">
+          <label class="pctrow" for="pctIn"><span>混み具合</span><output id="pctOut" for="pctIn">50% ・ ${pctLabel(50)}</output></label>
+          <input type="range" id="pctIn" min="0" max="100" step="10" value="50" ${wait ? 'disabled' : ''}>
+          <div class="scale"><span>0% 空席が多い</span><span>100% 満席</span></div>
+          <label class="check"><input type="checkbox" id="waitIn" ${wait ? 'disabled' : ''}><span>席が空くのを待っている人がいる</span></label>
+          <button class="btn" id="postCrowd" type="button" ${wait ? 'disabled' : ''}>この内容で投稿する</button>
+        </div>
+        <div class="hint">あなたの投稿で、これから向かう学生の無駄足が減ります。同じ場所への混雑投稿は30分に1回までです。現地にいるときだけ投稿できます${sb ? '(投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません)' : '(試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます)'}。</div>
+      </div>
       <div class="sec"><h4>勉強のルール <span class="src off">${s.ownerSet ? 'お店が設定' : (s.srcLabel || 'Webの公開情報')}</span></h4>
         ${rulesBox(s)}
         <dl class="kv">
-          ${s.coupon ? `<dt>学生向け特典</dt><dd>${esc(s.coupon)}</dd>` : ''}
           <dt>滞在の上限</dt><dd>${s.limitUnknown ? NA : s.limit ? s.limit + '分' : '記載なし'}</dd>
           <dt>追加注文</dt><dd>${order}</dd>
-          <dt>料金</dt><dd>${esc(s.price)}</dd>
+        </dl>
+      </div>
+      <div class="sec"><h4>設備と席</h4>
+        <dl class="kv">
           <dt>勉強できる席</dt><dd>${s.seatsStudy === null ? NA : s.seatsStudy ? `${s.seatsApprox ? '約' : ''}${s.seatsStudy.toLocaleString()}席${s.seatsTotal ? `(店内 全${s.seatsTotal}席のうち)` : ''}` : 'なし'}</dd>
           ${s.seatNote ? `<dt>席の配置</dt><dd>${esc(s.seatNote)}</dd>` : ''}
-          <dt>机の広さ</dt><dd>${s.desk ? DESK[s.desk] : NA}</dd>
           <dt>電源</dt><dd>${powerText(s)}</dd>
           <dt>Wi-Fi</dt><dd>${s.wifi === null ? NA : s.wifi ? 'あり' : 'なし'}</dd>
+          <dt>机の広さ</dt><dd>${s.desk ? DESK[s.desk] : NA}</dd>
+        </dl>
+      </div>
+      <div class="sec"><h4>開館時間・料金・条件</h4>
+        <dl class="kv">
           <dt>営業時間</dt><dd>${hoursText(s)}</dd>
-          ${s.address ? `<dt>住所</dt><dd>${esc(s.address)}</dd>` : ''}
+          <dt>料金</dt><dd>${esc(s.price)}</dd>
+          ${s.coupon ? `<dt>学生向け特典</dt><dd>${esc(s.coupon)}</dd>` : ''}
           ${s.cond ? `<dt>利用条件</dt><dd>${esc(s.cond)}</dd>` : ''}
+          ${s.address ? `<dt>場所</dt><dd>${esc(s.address)}</dd>` : ''}
           <dt>情報の確認日</dt><dd>${s.checked}(${esc(s.srcLabel || 'Web上の公開情報')})</dd>
         </dl>
       </div>
       <div class="sec"><h4>公式情報と地図</h4>
         <div class="links">${(s.links || []).map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join('')}
           <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&query_place_id=' + s.placeId : ''}" target="_blank" rel="noopener">Googleマップで開く</a>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&destination_place_id=' + s.placeId : ''}&travelmode=walking" target="_blank" rel="noopener">徒歩の道順を見る</a></div>
+          <a hidden href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&destination_place_id=' + s.placeId : ''}&travelmode=walking" target="_blank" rel="noopener">徒歩の道順を見る</a></div>
         <div class="hint">徒歩の時間は直線距離からの目安です。実際の道順と時間はGoogleマップで確認してください。</div>
       </div>
       <div class="sec"><h4>利用者の実績 <span class="src usr">投稿から集計</span></h4>
@@ -1014,17 +1091,6 @@ function renderDetail(s) {
         ${getPhotos(s).length ? `<div class="gallery">${getPhotos(s).map(p => `<button class="ph" data-photo="${p.id}" aria-label="写真を拡大:${esc(p.caption)}"><span class="phimg">${photoMedia(p, s)}</span><span class="phbadge ${p.by}">${p.by === 'store' ? 'お店' : '利用者'}</span><span class="cap">${esc(p.caption)}</span></button>`).join('')}</div>` : '<div class="hint">まだ写真がありません。</div>'}
         <button class="btn ghost" id="photoBtn">勉強スペースの写真を投稿する</button>
         ${sb ? '<div class="hint">写真は、今はこの端末にだけ保存されます(みんなとの共有は準備中です)。</div>' : ''}
-      </div>
-      <div class="sec"><h4>今の混雑</h4>
-        <div>${!open ? '<span class="crowd closed">営業時間外</span>' : c ? `<span class="crowd l${c.level}">${CROWD[c.level]}</span> <span class="hint">${c.src}</span>` : '<span class="crowd closed">混雑情報なし</span> <span class="hint">直近2時間の投稿はまだありません</span>'}</div>
-        ${open && c && s.seatsStudy ? `<div class="hint">空いている勉強席の目安:約${Math.max(0, Math.round(s.seatsStudy * [0.6, 0.3, 0.05][c.level]))}席(勉強席${s.seatsStudy}席と混雑から推定)</div>` : ''}
-        <div class="ask">${open ? '今この場所にいますか?混雑の様子を1タップで教えてください' : '営業時間中に現地にいるとき、混雑の様子を投稿できます'}</div>
-        ${crowdWait(s.id) ? `<div class="waitnote">投稿ありがとうございました。この場所には ${hhmm(Date.now() + crowdWait(s.id))} ごろからまた投稿できます(あと約${Math.ceil(crowdWait(s.id) / 60000)}分)</div>` : ''}
-        <div class="crowdpost" aria-label="混雑を投稿">${CROWD.map((t, i) => `<button class="l${i}" data-crowd="${i}" ${crowdWait(s.id) ? 'disabled' : ''}>${t}</button>`).join('')}</div>
-        <div class="hint">あなたの投稿で、これから向かう学生の無駄足が減ります。同じ場所への混雑投稿は30分に1回までです。現地にいるときだけ投稿できます${sb ? '(投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません)' : '(試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます)'}。</div>
-      </div>
-      <div class="sec">
-        ${s.study === 'ng' ? '<div class="hint">このお店は勉強を受け付けていないため、勉強タイマーは使えません。</div>' : s.study === 'unknown' ? '<div class="hint">勉強してよいかが未確認のため、勉強タイマーは使えません。お店の掲示や店員さんに確認できたら、修正提案で教えてください。</div>' : `<button class="btn" id="startHere">ここで勉強を始める(タイマー)</button>`}
       </div>
       <div class="sec"><h4>レビュー(${revs.length}件)</h4>
         ${revs.map(r => `<div class="review"><div class="who">${esc(r.who)} ・ ${esc(r.ago)} ・ 滞在${r.stay}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>${esc(r.text)}</div>`).join('') || `<div class="hint">${sb && !reviewsCache[s.id] ? 'レビューを読み込んでいます…' : 'まだレビューがありません。'}</div>`}
@@ -1255,7 +1321,7 @@ async function refreshCrowd() {
     const { data, error } = await sb.rpc('get_crowd_now');
     if (error) return;
     crowdShared = {};
-    (data || []).forEach(r => { crowdShared[r.spot_id] = { level: r.level, at: Date.parse(r.reported_at) }; });
+    (data || []).forEach(r => { crowdShared[r.spot_id] = { pct: r.pct != null ? r.pct : [20, 55, 85][r.level], waiting: !!r.waiting, n: r.reports || 1, at: Date.parse(r.reported_at) }; });
   } catch (e) { return; }
   if (tab === 'search') updateResults();
   if (sheet && sheet.kind === 'detail') renderSheet();
@@ -1304,26 +1370,27 @@ async function loadReviews(spotId) {
   } catch (e) { return; }
   if (sheet && sheet.kind === 'detail' && sheet.spot === spotId) renderSheet();
 }
-function postCrowdShared(s, lv) {
+function postCrowdShared(s, pct, waiting) {
+  const said = `約${pct}%${waiting ? '・待ちあり' : ''}`;
   if (!sb) {
-    store.posts.push({ spot: s.id, level: lv, at: Date.now() }); save(); openSheet('detail', s.id); render();
-    toast(`「${CROWD[lv]}」を投稿しました。ありがとうございます`); return;
+    store.posts.push({ spot: s.id, pct, waiting, level: pctLevel(pct, waiting), at: Date.now() }); save(); openSheet('detail', s.id); render();
+    toast(`「${said}」を投稿しました。ありがとうございます`); return;
   }
   if (!navigator.geolocation) { toast('この端末では位置情報が使えないため、混雑を投稿できません'); return; }
   toast('現地にいるか確認しています(位置は確認にだけ使い、保存しません)');
   navigator.geolocation.getCurrentPosition(async p => {
     let error = null;
-    try { ({ error } = await sb.rpc('post_crowd', { p_spot: s.id, p_level: lv, p_lat: p.coords.latitude, p_lng: p.coords.longitude })); }
+    try { ({ error } = await sb.rpc('post_crowd', { p_spot: s.id, p_pct: pct, p_waiting: waiting, p_lat: p.coords.latitude, p_lng: p.coords.longitude })); }
     catch (e) { error = { message: '通信できませんでした。もう一度お試しください' }; }
     if (error) {
       const h = error.hint || '';
-      if (h.indexOf('wait:') === 0) { store.posts.push({ spot: s.id, level: lv, at: +h.slice(5) * 1000 - CROWD_INTERVAL_MIN * 60000 }); save(); }
+      if (h.indexOf('wait:') === 0) { store.posts.push({ spot: s.id, pct, waiting, at: +h.slice(5) * 1000 - CROWD_INTERVAL_MIN * 60000 }); save(); }
       toast(h === 'too_far' ? `${s.name}から離れているようです。現地(約300m以内)にいるときに投稿してください` : (error.message || '投稿できませんでした'));
       openSheet('detail', s.id); return;
     }
-    store.posts.push({ spot: s.id, level: lv, at: Date.now() }); save();
+    store.posts.push({ spot: s.id, pct, waiting, at: Date.now() }); save();
     await refreshCrowd(); refreshCount(); openSheet('detail', s.id); render();
-    toast(`「${CROWD[lv]}」を投稿しました。みんなの画面に反映されています`);
+    toast(`「${said}」を投稿しました。みんなの画面に反映されています`);
   }, err => toast(err && err.code === 1 ? '混雑の投稿には、現地にいるかを確かめるため位置情報の許可が必要です(保存しません)' : '位置を確認できませんでした。もう一度お試しください'),
   { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 }
@@ -1455,7 +1522,14 @@ function showPreview(input, boxId) {
   if (!f) { box.innerHTML = ''; return; }
   readDataURL(f).then(u => { box.innerHTML = `<img src="${u}" alt="選んだ写真のプレビュー">`; }).catch(() => { box.innerHTML = ''; });
 }
-sheetRoot.addEventListener('change', e => { if (e.target.id === 'phFile') showPreview(e.target, 'phPrev'); });
+sheetRoot.addEventListener('change', e => {
+  if (e.target.id === 'phFile') showPreview(e.target, 'phPrev');
+  if (e.target.id === 'waitIn' && e.target.checked) { const r = document.getElementById('pctIn'); if (r) { r.value = 100; r.dispatchEvent(new Event('input', { bubbles: true })); } }
+});
+sheetRoot.addEventListener('input', e => {
+  if (e.target.id !== 'pctIn') return;
+  const o = document.getElementById('pctOut'); if (o) o.textContent = `${e.target.value}% ・ ${pctLabel(+e.target.value)}`;
+});
 view.addEventListener('submit', e => {
   if (e.target.id === 'stForm') { e.preventDefault(); saveStore(); return; }
   if (e.target.id === 'stPhotoForm') {
@@ -1505,11 +1579,10 @@ sheetRoot.addEventListener('click', e => {
     store.favs = store.favs.includes(s.id) ? store.favs.filter(x => x !== s.id) : [...store.favs, s.id];
     save(); toast(store.favs.includes(s.id) ? 'お気に入りに保存しました' : 'お気に入りから外しました'); renderSheet(); render(); return;
   }
-  const cb = t.closest('[data-crowd]');
-  if (cb) {
-    const lv = +cb.dataset.crowd;
+  if (t.closest('#postCrowd')) {
+    const pct = +document.getElementById('pctIn').value, waiting = document.getElementById('waitIn').checked;
     if (crowdWait(s.id)) { toast(`この場所への混雑投稿は30分に1回までです。${hhmm(Date.now() + crowdWait(s.id))} ごろからまた投稿できます`); return; }
-    requireLogin(() => { if (crowdWait(s.id)) { openSheet('detail', s.id); return; } postCrowdShared(s, lv); });
+    requireLogin(() => { if (crowdWait(s.id)) { openSheet('detail', s.id); return; } postCrowdShared(s, pct, waiting); });
     return;
   }
   if (t.closest('#startHere')) {
