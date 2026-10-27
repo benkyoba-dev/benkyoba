@@ -315,6 +315,25 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 .postbox input[type="range"] { width: 100%; accent-color: var(--accent); }
 .scale { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
 .postbox .btn { width: 100%; }
+.subacts { display: flex; flex-wrap: wrap; gap: 8px; }
+.subacts .btn { flex: 1 1 auto; text-align: center; text-decoration: none; }
+.btn.muted { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.acc { border-top: 1px solid var(--line); margin-top: 10px; }
+.fold { border-bottom: 1px solid var(--line); }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px; padding: 12px 2px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary b { font-size: 14px; flex: none; }
+.fold > summary span { font-size: 13px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold > summary::after { content: '+'; color: var(--muted); font-weight: 700; }
+.fold[open] > summary::after { content: '−'; }
+.foldbody { display: grid; gap: 8px; padding: 0 2px 14px; }
+.minor { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; padding: 16px 0 6px; }
+.minor button, .linkbtn { background: none; border: 0; padding: 4px 0; color: var(--accent); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.perkline { font-size: 12.5px; color: var(--muted); text-align: center; }
+.perkline .linkbtn { font-size: 12.5px; padding: 2px 0; }
+#perks { scroll-margin-top: 64px; }
+.tcard.flash { box-shadow: 0 0 0 3px var(--accent-soft); transition: box-shadow .3s; }
+.more.tiny summary { font-size: 12px; color: var(--muted); font-weight: 400; }
 .more summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 700; padding-block: 2px; }
 .more[open] summary { margin-bottom: 8px; }
 .perks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -1053,6 +1072,37 @@ function saveStore() {
 
 function stars(v) { return `<span style="font-family:var(--f-mono);font-weight:600">${v.toFixed(1)}</span><span class="hint"> / 5</span>`; }
 
+// 詳細画面の主役:混雑の投稿。押すまでスライダーは出さない。現在地(10分以内)が300mより遠いときは目立たせない
+// 投稿ボタンの下の1行:次にもらえるもの+マイページの「投稿するといいこと」へ
+function perkLineHTML() {
+  const n = myPostCount(), next = LEVELS.find(l => n < l.n);
+  const lead = n === 0 ? `1件目で「${LEVELS[0].name}」バッジ` : next ? `あと${next.n - n}件で「${next.name}」` : `投稿${n}件・すべて達成`;
+  return `<div class="perkline">${lead} ・ <button type="button" class="linkbtn" id="toPerks">投稿するといいこと ›</button></div>`;
+}
+const foldOpen = k => sheet && sheet.folds && sheet.folds.includes(k) ? ' open' : '';
+const HERE_FRESH_MS = 10 * 60000;
+function postAreaHTML(s, open, wait) {
+  if (!open) return '<div class="hint">営業時間中に現地にいるとき、混雑を投稿できます</div>';
+  if (wait) return `<div class="waitnote">投稿ありがとうございました。${hhmm(Date.now() + wait)} ごろからまた投稿できます</div>
+    <div class="hint">よければ <button type="button" class="linkbtn" id="revBtn2">レビューも書けます</button>(滞在時間・静かさ)</div>`;
+  const far = here && here.at && Date.now() - here.at < HERE_FRESH_MS && distM(here, s) > 300;
+  if (!sheet || !sheet.postOpen) {
+    if (far) { const d = distM(here, s); return `<button class="btn muted" id="openPost" type="button">混雑を投稿する</button>
+      <div class="hint">現在地から約${d >= 1000 ? (d / 1000).toFixed(1) + 'km' : Math.round(d / 10) * 10 + 'm'}。現地に着いたら投稿できます</div>`; }
+    return '<button class="btn" id="openPost" type="button">混雑を投稿する</button>' + perkLineHTML();
+  }
+  return `<div class="postbox">
+      <div class="ask">見たままの混み具合は?</div>
+      <label class="pctrow" for="pctIn"><span>混み具合</span><output id="pctOut" for="pctIn">50% ・ ${pctLabel(50)}</output></label>
+      <input type="range" id="pctIn" min="0" max="100" step="10" value="50">
+      <div class="scale"><span>0% 空席が多い</span><span>100% 満席</span></div>
+      <label class="check"><input type="checkbox" id="waitIn"><span>席が空くのを待っている人がいる</span></label>
+      <button class="btn" id="postCrowd" type="button">この内容で投稿する</button>
+      ${perkLineHTML()}
+      <details class="more tiny"><summary>現地にいるときだけ・30分に1回</summary><div class="hint">今の様子を1件教えるだけで、「行ったら満席」をみんなで減らせます。${sb ? '投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません。' : '試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます。'}</div></details>
+    </div>`;
+}
+
 function renderDetail(s) {
   const st = STUDY[s.study];
   const c = crowdNow(s);
@@ -1075,71 +1125,63 @@ function renderDetail(s) {
         <div class="big ${h.open ? '' : 'off'}">${h.text}</div>
         ${open ? (c ? `${crowdBar(s)}<div class="hint">${c.src}${freeSeats !== null ? ` ・ 空いている勉強席の目安 約${freeSeats}席` : ''}</div>` : '<div class="cbar none">混雑情報なし(直近2時間の投稿はまだありません)</div>') : ''}
         ${alertLine(s)}
-        <a class="btn ghost" href="${dirUrl}" target="_blank" rel="noopener">徒歩の道順を見る(Googleマップ)</a>
-      </div>
-      <div class="sec">
-        ${s.study === 'ng' ? '<div class="hint">このお店は勉強を受け付けていないため、勉強タイマーは使えません。</div>' : s.study === 'unknown' ? '<div class="hint">勉強してよいかが未確認のため、勉強タイマーは使えません。お店の掲示や店員さんに確認できたら、修正提案で教えてください。</div>' : `<button class="btn" id="startHere">ここで勉強を始める(タイマー)</button>`}
-      </div>
-      <div class="sec"><h4>混雑を投稿</h4>
-        <div class="ask">${open ? '今この場所にいますか?見たままの混み具合を教えてください' : '営業時間中に現地にいるとき、混雑の様子を投稿できます'}</div>
-        ${wait ? `<div class="waitnote">投稿ありがとうございました。この場所には ${hhmm(Date.now() + wait)} ごろからまた投稿できます(あと約${Math.ceil(wait / 60000)}分)</div>` : ''}
-        <div class="postbox">
-          <label class="pctrow" for="pctIn"><span>混み具合</span><output id="pctOut" for="pctIn">50% ・ ${pctLabel(50)}</output></label>
-          <input type="range" id="pctIn" min="0" max="100" step="10" value="50" ${wait ? 'disabled' : ''}>
-          <div class="scale"><span>0% 空席が多い</span><span>100% 満席</span></div>
-          <label class="check"><input type="checkbox" id="waitIn" ${wait ? 'disabled' : ''}><span>席が空くのを待っている人がいる</span></label>
-          <button class="btn" id="postCrowd" type="button" ${wait ? 'disabled' : ''}>この内容で投稿する</button>
+        ${postAreaHTML(s, open, wait)}
+        <div class="subacts">
+          <a class="btn ghost small" href="${dirUrl}" target="_blank" rel="noopener">道順を見る</a>
+          ${s.study === 'ng' || s.study === 'unknown' ? '' : '<button class="btn ghost small" id="startHere" type="button">ここで勉強を始める(タイマー)</button>'}
         </div>
-        <div class="hint">あなたの投稿で、これから向かう学生の無駄足が減ります。同じ場所への混雑投稿は30分に1回までです。現地にいるときだけ投稿できます${sb ? '(投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません)' : '(試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます)'}。</div>
       </div>
-      <div class="sec"><h4>勉強のルール <span class="src off">${s.ownerSet ? 'お店が設定' : (s.srcLabel || 'Webの公開情報')}</span></h4>
-        ${rulesBox(s)}
-        <dl class="kv">
-          <dt>滞在の上限</dt><dd>${s.limitUnknown ? NA : s.limit ? s.limit + '分' : '記載なし'}</dd>
-          <dt>追加注文</dt><dd>${order}</dd>
-        </dl>
+      <div class="acc">
+        <details class="fold" data-fold="rules"${foldOpen('rules')}><summary><b>勉強のルール</b><span>${st.label}${s.limit ? ` ・ ${s.limit}分まで` : ''}</span></summary>
+          <div class="foldbody"><span class="src off">${s.ownerSet ? 'お店が設定' : esc(s.srcLabel || 'Webの公開情報')}</span>
+          ${s.study === 'ng' ? '<div class="hint">このお店は勉強を受け付けていないため、勉強タイマーは使えません。</div>' : s.study === 'unknown' ? '<div class="hint">勉強してよいかが未確認のため、勉強タイマーは使えません。お店の掲示や店員さんに確認できたら、修正提案で教えてください。</div>' : ''}
+          ${rulesBox(s)}
+          <dl class="kv">
+            <dt>滞在の上限</dt><dd>${s.limitUnknown ? NA : s.limit ? s.limit + '分' : '記載なし'}</dd>
+            <dt>追加注文</dt><dd>${order}</dd>
+          </dl></div>
+        </details>
+        <details class="fold" data-fold="seats"${foldOpen('seats')}><summary><b>設備と席</b><span>電源 ${s.power === 'unknown' ? '未確認' : POWER[s.power]} ・ Wi-Fi ${s.wifi === null ? '未確認' : s.wifi ? 'あり' : 'なし'}</span></summary>
+          <div class="foldbody"><dl class="kv">
+            <dt>勉強できる席</dt><dd>${s.seatsStudy === null ? NA : s.seatsStudy ? `${s.seatsApprox ? '約' : ''}${s.seatsStudy.toLocaleString()}席${s.seatsTotal ? `(店内 全${s.seatsTotal}席のうち)` : ''}` : 'なし'}</dd>
+            ${s.seatNote ? `<dt>席の配置</dt><dd>${esc(s.seatNote)}</dd>` : ''}
+            <dt>電源</dt><dd>${powerText(s)}</dd>
+            <dt>Wi-Fi</dt><dd>${s.wifi === null ? NA : s.wifi ? 'あり' : 'なし'}</dd>
+            <dt>机の広さ</dt><dd>${s.desk ? DESK[s.desk] : NA}</dd>
+          </dl></div>
+        </details>
+        <details class="fold" data-fold="hours"${foldOpen('hours')}><summary><b>時間・料金・条件</b><span>${s.free ? '無料' : '有料'}${s.closed !== null && s.closed !== undefined ? ` ・ ${['日', '月', '火', '水', '木', '金', '土'][s.closed]}曜休み` : s.weekendClosed ? ' ・ 土日休み' : ''}</span></summary>
+          <div class="foldbody"><dl class="kv">
+            <dt>営業時間</dt><dd>${hoursText(s)}</dd>
+            <dt>料金</dt><dd>${esc(s.price)}</dd>
+            ${s.coupon ? `<dt>学生向け特典</dt><dd>${esc(s.coupon)}</dd>` : ''}
+            ${s.cond ? `<dt>利用条件</dt><dd>${esc(s.cond)}</dd>` : ''}
+            ${s.address ? `<dt>場所</dt><dd>${esc(s.address)}</dd>` : ''}
+            <dt>情報の確認日</dt><dd>${s.checked}(${esc(s.srcLabel || 'Web上の公開情報')})</dd>
+          </dl></div>
+        </details>
+        <details class="fold" data-fold="links"${foldOpen('links')}><summary><b>公式情報と地図</b><span>リンク${(s.links || []).length + 1}件</span></summary>
+          <div class="foldbody"><div class="links">${(s.links || []).map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join('')}
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&query_place_id=' + s.placeId : ''}" target="_blank" rel="noopener">Googleマップで開く</a></div>
+          <div class="hint">徒歩の時間は直線距離からの目安です。実際の道順と時間はGoogleマップで確認してください。</div></div>
+        </details>
+        <details class="fold" data-fold="voices"${foldOpen('voices')}><summary><b>みんなの声</b><span>レビュー${revs.length}件 ・ 写真${getPhotos(s).length}枚</span></summary>
+          <div class="foldbody">
+          ${(() => { const st2 = statsOf(s); return st2.n ? `<div class="stats">
+            <div class="stat"><div class="v">${Math.floor(st2.stay / 60)}:${pad(Math.round(st2.stay % 60))}</div><div class="k">平均滞在(時間:分)</div></div>
+            <div class="stat"><div class="v">${st2.quiet.toFixed(1)}</div><div class="k">静かさ / 5</div></div>
+            <div class="stat"><div class="v">${st2.powerEase.toFixed(1)}</div><div class="k">電源席の取りやすさ / 5</div></div>
+          </div><div class="hint">レビュー${st2.n}件から集計</div>` : ''; })()}
+          ${getPhotos(s).length ? `<div class="gallery">${getPhotos(s).map(p => `<button class="ph" data-photo="${p.id}" aria-label="写真を拡大:${esc(p.caption)}"><span class="phimg">${photoMedia(p, s)}</span><span class="phbadge ${p.by}">${p.by === 'store' ? 'お店' : '利用者'}</span><span class="cap">${esc(p.caption)}</span></button>`).join('')}</div>` : ''}
+          ${sb && getPhotos(s).length ? '<div class="hint">写真は、今はこの端末にだけ保存されます(みんなとの共有は準備中です)。</div>' : ''}
+          ${revs.map(r => `<div class="review"><div class="who">${esc(r.who)} ・ ${esc(r.ago)} ・ 滞在${r.stay}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>${esc(r.text)}</div>`).join('') || `<div class="hint">${sb && !reviewsCache[s.id] ? 'レビューを読み込んでいます…' : 'まだレビューも写真もありません。'}</div>`}
+          </div>
+        </details>
       </div>
-      <div class="sec"><h4>設備と席</h4>
-        <dl class="kv">
-          <dt>勉強できる席</dt><dd>${s.seatsStudy === null ? NA : s.seatsStudy ? `${s.seatsApprox ? '約' : ''}${s.seatsStudy.toLocaleString()}席${s.seatsTotal ? `(店内 全${s.seatsTotal}席のうち)` : ''}` : 'なし'}</dd>
-          ${s.seatNote ? `<dt>席の配置</dt><dd>${esc(s.seatNote)}</dd>` : ''}
-          <dt>電源</dt><dd>${powerText(s)}</dd>
-          <dt>Wi-Fi</dt><dd>${s.wifi === null ? NA : s.wifi ? 'あり' : 'なし'}</dd>
-          <dt>机の広さ</dt><dd>${s.desk ? DESK[s.desk] : NA}</dd>
-        </dl>
-      </div>
-      <div class="sec"><h4>開館時間・料金・条件</h4>
-        <dl class="kv">
-          <dt>営業時間</dt><dd>${hoursText(s)}</dd>
-          <dt>料金</dt><dd>${esc(s.price)}</dd>
-          ${s.coupon ? `<dt>学生向け特典</dt><dd>${esc(s.coupon)}</dd>` : ''}
-          ${s.cond ? `<dt>利用条件</dt><dd>${esc(s.cond)}</dd>` : ''}
-          ${s.address ? `<dt>場所</dt><dd>${esc(s.address)}</dd>` : ''}
-          <dt>情報の確認日</dt><dd>${s.checked}(${esc(s.srcLabel || 'Web上の公開情報')})</dd>
-        </dl>
-      </div>
-      <div class="sec"><h4>公式情報と地図</h4>
-        <div class="links">${(s.links || []).map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join('')}
-          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&query_place_id=' + s.placeId : ''}" target="_blank" rel="noopener">Googleマップで開く</a>
-          <a hidden href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.mapQuery || s.name)}${s.placeId ? '&destination_place_id=' + s.placeId : ''}&travelmode=walking" target="_blank" rel="noopener">徒歩の道順を見る</a></div>
-        <div class="hint">徒歩の時間は直線距離からの目安です。実際の道順と時間はGoogleマップで確認してください。</div>
-      </div>
-      <div class="sec"><h4>利用者の実績 <span class="src usr">投稿から集計</span></h4>
-        ${(() => { const st2 = statsOf(s); return st2.n ? `<div class="stats">
-          <div class="stat"><div class="v">${Math.floor(st2.stay / 60)}:${pad(Math.round(st2.stay % 60))}</div><div class="k">平均滞在(時間:分)</div></div>
-          <div class="stat"><div class="v">${st2.quiet.toFixed(1)}</div><div class="k">静かさ / 5</div></div>
-          <div class="stat"><div class="v">${st2.powerEase.toFixed(1)}</div><div class="k">電源席の取りやすさ / 5</div></div>
-        </div><div class="hint">レビュー${st2.n}件から集計</div>` : '<div class="hint">まだレビューがありません。最初のレビューを書くと、滞在時間・静かさ・電源席の取りやすさがここに表示されます。</div>'; })()}
-      </div>
-      <div class="sec"><h4>勉強スペースの写真(${getPhotos(s).length})</h4>
-        ${getPhotos(s).length ? `<div class="gallery">${getPhotos(s).map(p => `<button class="ph" data-photo="${p.id}" aria-label="写真を拡大:${esc(p.caption)}"><span class="phimg">${photoMedia(p, s)}</span><span class="phbadge ${p.by}">${p.by === 'store' ? 'お店' : '利用者'}</span><span class="cap">${esc(p.caption)}</span></button>`).join('')}</div>` : '<div class="hint">まだ写真がありません。</div>'}
-        <button class="btn ghost" id="photoBtn">勉強スペースの写真を投稿する</button>
-        ${sb ? '<div class="hint">写真は、今はこの端末にだけ保存されます(みんなとの共有は準備中です)。</div>' : ''}
-      </div>
-      <div class="sec"><h4>レビュー(${revs.length}件)</h4>
-        ${revs.map(r => `<div class="review"><div class="who">${esc(r.who)} ・ ${esc(r.ago)} ・ 滞在${r.stay}分 ・ 静かさ${r.quiet} ・ 電源${r.power}</div>${esc(r.text)}</div>`).join('') || `<div class="hint">${sb && !reviewsCache[s.id] ? 'レビューを読み込んでいます…' : 'まだレビューがありません。'}</div>`}
-        <button class="btn ghost" id="revBtn">レビューを書く</button>
-        <button class="btn ghost" id="editBtn">情報の修正を提案する</button>
+      <div class="minor">
+        <button type="button" id="revBtn">レビューを書く</button>
+        <button type="button" id="photoBtn">写真を投稿</button>
+        <button type="button" id="editBtn">情報の修正を提案</button>
       </div>
     </div></div></div>`;
 }
@@ -1291,20 +1333,21 @@ function crowdWait(spotId) {
   return Math.max(0, last + CROWD_INTERVAL_MIN * 60000 - Date.now());
 }
 const hhmm = t => { const d = new Date(t); return `${d.getHours()}:${pad(d.getMinutes())}`; };
+let perksJump = false; // 詳細画面から飛んできたときは「投稿するといいこと」を開いて見せる
 const myLevel = () => LEVELS.filter(l => myPostCount() >= l.n).pop() || null;
 function renderPerks() {
   const n = myPostCount(), lv = myLevel(), next = LEVELS.find(l => n < l.n);
   const reasons = `<ol class="perks">
-      <li><span class="n">1</span><span><b>ほかの学生の無駄足が減る</b><span class="hint">混雑は2時間ほどで変わります。あなたの1件が、これから向かう人の判断材料になります。</span></span></li>
+      <li><span class="n">1</span><span><b>「行ったら満席」をみんなで減らせる</b><span class="hint">混雑は2時間ほどで変わります。今の様子を1件教えるだけで、次に来る人もあなたも、行く前に判断できます。</span></span></li>
       <li><span class="n">2</span><span><b>自分の勉強場所メモになる</b><span class="hint">レビューや写真は、次にどこへ行くか決めるときの自分用の記録として残ります。</span></span></li>
       <li><span class="n">3</span><span><b>投稿数に応じて特典が増える</b><span class="hint">混雑・レビュー・写真・修正提案のどれでも1件と数えます。同じ場所への同じ種類の投稿は、1日1件までです。</span></span></li>
     </ol>`;
-  return `<div class="tcard"><b>${n === 0 ? '投稿するといいこと' : '投稿の特典'}</b>
+  return `<div class="tcard" id="perks"><b>${n === 0 ? '投稿するといいこと' : '投稿の特典'}</b>
     ${n === 0 ? reasons : ''}
     <div class="sortrow"><span>あなたの投稿 <b style="color:var(--ink);font-family:var(--f-mono)">${n}件</b>${lv ? ` ・ <span class="badge">${lv.name}</span>` : ''}</span><span>${next ? `次まであと${next.n - n}件` : 'すべて達成'}</span></div>
     ${next ? `<div class="bar"><i style="width:${Math.min(100, n / next.n * 100)}%"></i></div>` : ''}
     <div class="levels">${LEVELS.map(l => `<div class="lv ${n >= l.n ? 'done' : ''}"><span class="c">${l.n}件${n >= l.n ? ' 達成' : ''}</span><b>${l.name}</b><span class="p">${l.perk}</span></div>`).join('')}</div>
-    ${n === 0 ? '' : `<details class="more"><summary>投稿するといいこと</summary>${reasons}</details>`}
+    ${n === 0 ? '' : `<details class="more" id="perkWhy"${perksJump ? ' open' : ''}><summary>投稿するといいこと</summary>${reasons}</details>`}
   </div>`;
 }
 
@@ -1452,7 +1495,7 @@ function requestHere() {
   locating = true; toast('現在地を確認しています(近い順に並べるためだけに使い、保存しません)');
   navigator.geolocation.getCurrentPosition(p => {
     locating = false;
-    here = { lat: p.coords.latitude, lng: p.coords.longitude, name: '現在地' }; baseKind = 'here';
+    here = { lat: p.coords.latitude, lng: p.coords.longitude, name: '現在地', at: Date.now() }; baseKind = 'here';
     render(); panTo(here, 16);
     toast(distM(here, BASES.univ) > 5000 ? '現在地が角間・もりの里から離れているため、距離は参考程度です' : '現在地から近い順に並べました');
   }, err => {
@@ -1636,6 +1679,12 @@ sheetRoot.addEventListener('click', e => {
     store.favs = store.favs.includes(s.id) ? store.favs.filter(x => x !== s.id) : [...store.favs, s.id];
     save(); toast(store.favs.includes(s.id) ? 'お気に入りに保存しました' : 'お気に入りから外しました'); renderSheet(); render(); return;
   }
+  if (t.closest('#toPerks')) {
+    perksJump = true; closeSheet(); tab = 'me'; render(); perksJump = false;
+    const el = document.getElementById('perks'); if (el) { el.scrollIntoView({ block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
+    return;
+  }
+  if (t.closest('#openPost')) { sheet.postOpen = true; renderSheet(); const b = document.getElementById('postCrowd'); if (b) b.scrollIntoView({ block: 'nearest' }); return; }
   if (t.closest('#postCrowd')) {
     const pct = +document.getElementById('pctIn').value, waiting = document.getElementById('waitIn').checked;
     if (crowdWait(s.id)) { toast(`この場所への混雑投稿は30分に1回までです。${hhmm(Date.now() + crowdWait(s.id))} ごろからまた投稿できます`); return; }
@@ -1647,7 +1696,7 @@ sheetRoot.addEventListener('click', e => {
     store.timer = { spot: s.id, start: Date.now(), pausedTotal: 0, pausedAt: null, fast: false, orders: 0 };
     save(); closeSheet(); tab = 'timer'; render(); toast(`${s.name} にチェックインしました`); return;
   }
-  if (t.closest('#revBtn')) { requireLogin(() => openSheet('review', s.id)); return; }
+  if (t.closest('#revBtn, #revBtn2')) { requireLogin(() => openSheet('review', s.id)); return; }
   if (t.closest('#editBtn')) { requireLogin(() => openSheet('edit', s.id)); return; }
   const ph = t.closest('[data-photo]');
   if (ph) { openSheet('photo', s.id, { photo: ph.dataset.photo }); return; }
@@ -1657,6 +1706,10 @@ sheetRoot.addEventListener('click', e => {
   const star = t.closest('.stars button');
   if (star) { star.parentElement.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b === star)); return; }
 });
+sheetRoot.addEventListener('toggle', e => {
+  const d = e.target; if (!sheet || !d.dataset || !d.dataset.fold) return;
+  const f = (sheet.folds || []).filter(x => x !== d.dataset.fold); if (d.open) f.push(d.dataset.fold); sheet.folds = f;
+}, true);
 sheetRoot.addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
