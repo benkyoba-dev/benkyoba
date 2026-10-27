@@ -356,8 +356,8 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 <script>
 (() => {
 'use strict';
-const TYPES = { canteen: '学内食堂', cafe: 'カフェ', public_lib: '公共図書館', univ_lib: '大学図書館', study_room: '有料自習室', cowork: 'コワーキング' };
-const TYPE_MARK = { canteen: '食', cafe: 'カ', public_lib: '図', univ_lib: '大', study_room: '自', cowork: 'コ' };
+const TYPES = { canteen: '学内食堂', cafe: 'カフェ', public_lib: '公共図書館', univ_lib: '大学図書館', free_room: '無料自習室', study_room: '有料自習室', cowork: 'コワーキング' };
+const TYPE_MARK = { canteen: '食', cafe: 'カ', public_lib: '図', univ_lib: '大', free_room: '習', study_room: '自', cowork: 'コ' };
 const STUDY = {
   welcome: { label: '勉強歓迎', tag: 'hl' },
   ok: { label: '勉強OK', tag: '' },
@@ -882,7 +882,7 @@ function renderStore() {
 
 // ---------- photos ----------
 function sampleSVG(s, v) {
-  const wall = { cafe: '#dcc7a8', public_lib: '#d3dadf', univ_lib: '#d8dccb', study_room: '#e6e2d9', cowork: '#cfd9e3' }[s.type];
+  const wall = { cafe: '#dcc7a8', public_lib: '#d3dadf', univ_lib: '#d8dccb', free_room: '#e6e2d9', study_room: '#e6e2d9', cowork: '#cfd9e3' }[s.type];
   const w = { wide: 230, normal: 175, narrow: 120 }[s.desk];
   const tx = 160 - w / 2 + (v ? 18 : -10);
   const wood = v ? '#9c7752' : '#7b5a3c';
