@@ -1099,7 +1099,7 @@ function postAreaHTML(s, open, wait) {
       <label class="check"><input type="checkbox" id="waitIn"><span>席が空くのを待っている人がいる</span></label>
       <button class="btn" id="postCrowd" type="button">この内容で投稿する</button>
       ${perkLineHTML()}
-      <details class="more tiny"><summary>現地にいるときだけ・30分に1回</summary><div class="hint">今の様子を1件教えるだけで、「行ったら満席」をみんなで減らせます。${sb ? '投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません。' : '試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます。'}</div></details>
+      <details class="more tiny"><summary>現地にいるときだけ・30分に1回</summary><div class="hint">みんなが少しずつ投稿するほど、あなたも行く前に空き具合が分かるようになります。${sb ? '投稿の前に、スポットから約300m以内にいるかを位置情報で確かめます。位置は保存しません。' : '試用版では位置の確認を省略し、投稿はこの端末にだけ保存されます。'}</div></details>
     </div>`;
 }
 
@@ -1338,7 +1338,7 @@ const myLevel = () => LEVELS.filter(l => myPostCount() >= l.n).pop() || null;
 function renderPerks() {
   const n = myPostCount(), lv = myLevel(), next = LEVELS.find(l => n < l.n);
   const reasons = `<ol class="perks">
-      <li><span class="n">1</span><span><b>「行ったら満席」をみんなで減らせる</b><span class="hint">混雑は2時間ほどで変わります。今の様子を1件教えるだけで、次に来る人もあなたも、行く前に判断できます。</span></span></li>
+      <li><span class="n">1</span><span><b>投稿が集まるほど、自分の席探しもラクになる</b><span class="hint">みんなが少しずつ投稿すると、行く前に空き具合が分かる場所が増えていきます。</span></span></li>
       <li><span class="n">2</span><span><b>自分の勉強場所メモになる</b><span class="hint">レビューや写真は、次にどこへ行くか決めるときの自分用の記録として残ります。</span></span></li>
       <li><span class="n">3</span><span><b>投稿数に応じて特典が増える</b><span class="hint">混雑・レビュー・写真・修正提案のどれでも1件と数えます。同じ場所への同じ種類の投稿は、1日1件までです。</span></span></li>
     </ol>`;
